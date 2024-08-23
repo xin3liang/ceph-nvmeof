@@ -1,0 +1,113 @@
+---
+# yamllint disable rule:line-length
+name: "build-multi-arch-image"
+# yamllint disable-line rule:truthy
+on: workflow_dispatch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+env:
+  WAIT_INTERVAL_SECS: 1
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Build container images - spdk
+        run: make build SVC=spdk
+
+      - name: Build container images - nvmeof
+        run: make build SVC=nvmeof
+
+      - name: Build container images - nvmeof-cli
+        run: make build SVC=nvmeof-cli
+
+      - name: Save container images
+        run: |
+          . .env
+          docker image list --filter label="io.ceph.nvmeof"
+          docker save $QUAY_NVMEOF:$NVMEOF_VERSION > nvmeof.tar
+          docker save $QUAY_NVMEOFCLI:$NVMEOF_VERSION > nvmeof-cli.tar
+
+      - name: Upload nvmeof container images
+        uses: actions/upload-artifact@v4
+        with:
+          name: container_images_nvmeof
+          path: |
+            nvmeof.tar
+            nvmeof-cli.tar
+
+  build-arm64:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Build container images - spdk
+        run: make build SVC=spdk TARGET_ARCH=arm64
+
+      - name: Build container images - nvmeof
+        run: make build SVC=nvmeof TARGET_ARCH=arm64
+
+      - name: Build container images - nvmeof-cli
+        run: make build SVC=nvmeof-cli TARGET_ARCH=arm64
+
+      - name: Save container images
+        run: |
+          . .env
+          docker tag $QUAY_NVMEOF:$NVMEOF_VERSION $QUAY_NVMEOF:$NVMEOF_VERSION-arm64
+          docker tag $QUAY_NVMEOFCLI:$NVMEOF_VERSION $QUAY_NVMEOFCLI:$NVMEOF_VERSION-arm64
+          docker save $QUAY_NVMEOF:$NVMEOF_VERSION-arm64 > nvmeof-arm64.tar
+          docker save $QUAY_NVMEOFCLI:$NVMEOF_VERSION-arm64 > nvmeof-cli-arm64.tar
+          docker image list --filter label="io.ceph.nvmeof"
+
+      - name: Upload nvmeof-arm64 container images
+        uses: actions/upload-artifact@v4
+        with:
+          name: container_images_nvmeof_arm64
+          path: |
+            nvmeof-arm64.tar
+            nvmeof-cli-arm64.tar
+
+  push-nvmeof-images-to-registry:
+    needs: [build, build-arm64]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download container images
+        uses: actions/download-artifact@v4
+        with:
+          pattern: container_images_nvmeof*
+          merge-multiple: true
+
+      - name: Load container images
+        run: |
+          docker load < nvmeof.tar
+          docker load < nvmeof-cli.tar
+          docker load < nvmeof-arm64.tar
+          docker load < nvmeof-cli-arm64.tar
+          docker image list --filter label="io.ceph.nvmeof"
+
+      - name: Login to quay.io
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ vars.CONTAINER_REGISTRY }}
+          username: '${{ vars.CONTAINER_REGISTRY_USERNAME }}'
+          password: '${{ secrets.CONTAINER_REGISTRY_PASSWORD }}'
+
+      - name: Publish nvmeof containers when release/tag is created
+        run: |
+          make push QUAY="${{ vars.CONTAINER_REGISTRY }}/${{ vars.CONTAINER_REGISTRY_USERNAME }}"
+          make push QUAY="${{ vars.CONTAINER_REGISTRY }}/${{ vars.CONTAINER_REGISTRY_USERNAME }}" TAG_SUFFIX="-arm64"
+          make push-manifest-list QUAY="${{ vars.CONTAINER_REGISTRY }}/${{ vars.CONTAINER_REGISTRY_USERNAME }}"
