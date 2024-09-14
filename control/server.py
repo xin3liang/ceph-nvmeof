@@ -67,15 +67,9 @@ def int_to_bitmask(n):
 def cpumask_set(args):
     """Check if reactor cpu mask is set in command line args"""
 
-    # Check if "-m" or "--cpumask" is in the arguments
-    if "-m" in args or "--cpumask" in args:
-        return True
-
-    # Check for the presence of "--cpumask="
     for arg in args:
-        if arg.startswith('--cpumask='):
+        if "-m" in arg or "--cpumask" in arg:
             return True
-
     return False
 
 class GatewayServer:
