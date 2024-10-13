@@ -29,6 +29,7 @@ def two_gateways(config):
     sockB = f"spdk_{nameB}.sock"
     config.config["gateway-logs"]["log_level"] = "debug"
     config.config["gateway"]["group"] = ""
+    config.config["gateway"]["rebalance_period_sec"] = "0"
     addr = config.get("gateway", "addr")
     configA = copy.deepcopy(config)
     configB = copy.deepcopy(config)
@@ -123,10 +124,10 @@ def change_one_namespace_lb_group(caplog, subsys, nsid_to_change, new_group):
         time.sleep(8)
 
     assert f"Changing load balancing group of namespace {nsid_to_change} in {subsys} to {new_group}: Successful" in caplog.text
-    assert f"Received request to change load balancing group for namespace with NSID {nsid_to_change} in {subsys} to {new_group}, context: <grpc._server" in caplog.text
+    assert f"Received auto False request to change load balancing group for namespace with NSID {nsid_to_change} in {subsys} to {new_group}, context: <grpc._server" in caplog.text
     assert f"Received request to delete namespace" not in caplog.text
     assert f"Received request to add a namespace" not in caplog.text
-    assert f"Received request to change load balancing group for namespace with NSID {nsid_to_change} in {subsys} to {new_group}, context: None" in caplog.text
+    assert f"Received auto False request to change load balancing group for namespace with NSID {nsid_to_change} in {subsys} to {new_group}, context: None" in caplog.text
 
 def switch_namespaces_lb_group(caplog, ns_count, subsys):
     for i in range(1, 1 + (ns_count // 2)):
