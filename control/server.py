@@ -687,7 +687,9 @@ class GatewayServer:
                 consecutive_ping_failures += 1
                 if consecutive_ping_failures >= allowed_consecutive_spdk_ping_failures:
                     self.logger.critical(f"SPDK ping failed {consecutive_ping_failures} times, aborting")
-                    break
+                    raise SystemExit(f"SPDK ping failed, quitting gateway")
+                else:
+                    self.logger.warning(f"SPDK ping failed {consecutive_ping_failures} times, will keep trying")
             else:
                 consecutive_ping_failures = 0
 
