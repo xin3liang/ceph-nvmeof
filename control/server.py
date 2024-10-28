@@ -199,6 +199,15 @@ class GatewayServer:
         self.logger.info("The MonitorGroup gRPC server stopped...")
         self.monitor_server = None
 
+    def start_prometheus(self):
+        ###Starts the prometheus endpoint if enabled by the config.###
+
+        if self.config.getboolean_with_default("gateway", "enable_prometheus_exporter", True):
+            self.logger.info("Prometheus endpoint is enabled")
+            start_exporter(self.spdk_rpc_client, self.config, self.gateway_rpc, self.logger)
+        else:
+            self.logger.info(f"Prometheus endpoint is disabled. To enable, set the config option 'enable_prometheus_exporter = True'")
+
     def serve(self):
         """Starts gateway server."""
         self.logger.info(f"Starting serve, monitor client version: {self._monitor_client_version()}")
@@ -238,13 +247,6 @@ class GatewayServer:
         # Start server
         self.server.start()
 
-        # Start the prometheus endpoint if enabled by the config
-        if self.config.getboolean_with_default("gateway", "enable_prometheus_exporter", True):
-            self.logger.info("Prometheus endpoint is enabled")
-            start_exporter(self.spdk_rpc_client, self.config, self.gateway_rpc, self.logger)
-        else:
-            self.logger.info(f"Prometheus endpoint is disabled. To enable, set the config option 'enable_prometheus_exporter = True'")
-
         # Set SPDK log level
         log_level_args = {}
         log_level = self.config.get_with_default("spdk", "log_level", None)
@@ -254,6 +256,9 @@ class GatewayServer:
             self.gateway_rpc.set_spdk_nvmf_logs(log_req)
         
         self._register_service_map()
+
+        # This should be at the end of the function, after the server is up
+        self.start_prometheus()
 
     def _register_service_map(self):
         # show gateway in "ceph status" output
