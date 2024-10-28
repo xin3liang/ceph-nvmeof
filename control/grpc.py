@@ -1463,7 +1463,6 @@ class GatewayService(pb2_grpc.GatewayServicer):
                     nqn=request.subsystem_nqn,
                     nsid=request.nsid,
                     anagrpid=request.anagrpid,
-                    transit_anagrpid=0
                 )
                 self.logger.debug(f"nvmf_subsystem_set_ns_ana_group: {ret}")
                 if not find_ret.empty():
