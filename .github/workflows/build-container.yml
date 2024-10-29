@@ -647,16 +647,10 @@ jobs:
   atom:
     needs: [build, build-ceph]
     if: github.repository == 'ceph/ceph-nvmeof'
-    runs-on: ibmcloud-1
+    runs-on: atomRunner
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Atom env initialization
-        run: |
-          . .env
-          ACTION_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          ./tests/atom/atomEnvInit.sh $ATOM_SHA $ACTION_URL
 
       - name: Download container images
         uses: actions/download-artifact@v4
@@ -664,26 +658,29 @@ jobs:
           pattern: container_images_nvmeof
           merge-multiple: true
 
-      - name: Load container images
-        run: |
-          docker load < nvmeof.tar
-          docker load < nvmeof-cli.tar
-
       - name: Cluster build and Atom tests run
-        if: always() || failure()
+        if: always() && github.event_name != 'schedule'
         run: |
           . .env
-          ./tests/atom/clusterBuildTestsRun.sh $NVMEOF_VERSION $CEPH_SHA $ATOM_SHA
+          ACTION_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          ./tests/atom/clusterBuildTestsRun.sh $NVMEOF_VERSION $CEPH_SHA $ATOM_SHA $ACTION_URL
+            
+      - name: Cluster build and Atom nightly tests run
+        if: always() && github.event_name == 'schedule'
+        run: |
+          . .env
+          ACTION_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          ./tests/atom/clusterBuildTestsRun.sh $NVMEOF_VERSION $CEPH_SHA $ATOM_SHA $ACTION_URL 'nightly'
 
       - name: Atom artifact build
         if: always()
         run: ./tests/atom/cpArtifactAndCleanup.sh
-
+  
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: atom-artifact
-          path: /tmp/artifact/*
+          path: /home/cephnvme/artifact.tar.gz
 
   push-images-to-ceph-registry:
     if: github.event_name == 'release'
