@@ -45,9 +45,11 @@ function demo_test_dhchap()
     echo -n "${DHCHAP_KEY4}" > /tmp/temp-dhchap/dhchap/${NQN}/key1
     echo -n "${DHCHAP_KEY5}" > /tmp/temp-dhchap/dhchap/${NQN}/key2
     echo -n "${DHCHAP_KEY6}" > /tmp/temp-dhchap/dhchap/${NQN}/key3
+    echo -n "${DHCHAP_KEY7}" > /tmp/temp-dhchap/dhchap/${NQN}/key4
     chmod 0600 /tmp/temp-dhchap/dhchap/${NQN}/key1
     chmod 0600 /tmp/temp-dhchap/dhchap/${NQN}/key2
     chmod 0600 /tmp/temp-dhchap/dhchap/${NQN}/key3
+    chmod 0600 /tmp/temp-dhchap/dhchap/${NQN}/key4
 
     make demosecuredhchap OPTS=-T HOSTNQN="${NQN}host" HOSTNQN2="${NQN}host2" HOSTNQN3="${NQN}host3" NVMEOF_IO_PORT2=${port2} NVMEOF_IO_PORT3=${port3} DHCHAPKEY1="${DHCHAP_KEY4}" DHCHAPKEY2="${DHCHAP_KEY5}" DHCHAPKEY3="${DHCHAP_KEY6}"
 }
@@ -318,6 +320,7 @@ function demo_bdevperf_dhchap()
     make exec SVC=bdevperf OPTS=-T CMD="chmod 0600 ${dhchap_path}/key1"
     make exec SVC=bdevperf OPTS=-T CMD="chmod 0600 ${dhchap_path}/key2"
     make exec SVC=bdevperf OPTS=-T CMD="chmod 0600 ${dhchap_path}/key3"
+    make exec SVC=bdevperf OPTS=-T CMD="chmod 0600 ${dhchap_path}/key4"
     rm -rf /tmp/temp-dhchap
 
     echo "ℹ️  bdevperf add DHCHAP key name key1 to keyring"
@@ -326,6 +329,8 @@ function demo_bdevperf_dhchap()
     make -s exec SVC=bdevperf OPTS=-T CMD="$rpc -v -s $BDEVPERF_SOCKET keyring_file_add_key key2 ${dhchap_path}/key2"
     echo "ℹ️  bdevperf add DHCHAP controller key name key3 to keyring"
     make -s exec SVC=bdevperf OPTS=-T CMD="$rpc -v -s $BDEVPERF_SOCKET keyring_file_add_key key3 ${dhchap_path}/key3"
+    echo "ℹ️  bdevperf add DHCHAP key name key4 to keyring"
+    make -s exec SVC=bdevperf OPTS=-T CMD="$rpc -v -s $BDEVPERF_SOCKET keyring_file_add_key key4 ${dhchap_path}/key4"
 
     echo "ℹ️  bdevperf list keyring"
     make -s exec SVC=bdevperf OPTS=-T CMD="$rpc -s $BDEVPERF_SOCKET keyring_get_keys"
@@ -426,11 +431,54 @@ function demo_bdevperf_dhchap()
     controllers=`make -s exec SVC=bdevperf OPTS=-T CMD="$rpc -v -s $BDEVPERF_SOCKET bdev_nvme_get_controllers"`
     [[ "${controllers}" == "[]" ]]
 
+    echo "ℹ️  keep keys before change"
+    dhchap_key_list_pre_change=`make -s exec SVC=nvmeof OPTS=-T CMD="/usr/local/bin/spdk_rpc -s /var/tmp/spdk.sock keyring_get_keys"`
+    path1_pre=`echo ${dhchap_key_list_pre_change} | jq -r '.[0].path'`
+    path2_pre=`echo ${dhchap_key_list_pre_change} | jq -r '.[1].path'`
+    path3_pre=`echo ${dhchap_key_list_pre_change} | jq -r '.[2].path'`
+    name1_pre=`echo ${dhchap_key_list_pre_change} | jq -r '.[0].name'`
+    name2_pre=`echo ${dhchap_key_list_pre_change} | jq -r '.[1].name'`
+    name3_pre=`echo ${dhchap_key_list_pre_change} | jq -r '.[2].name'`
+    make exec SVC=nvmeof OPTS=-T CMD="test -f ${path1_pre}"
+
+    echo "ℹ️  change the key for host ${NQN}host"
+    cephnvmf_func host change_keys --subsystem $NQN --host-nqn ${NQN}host --dhchap-key "${DHCHAP_KEY7}"
+    make exec SVC=nvmeof OPTS=-T CMD="test ! -f ${path1_pre}"
+
+    echo "ℹ️  bdevperf tcp connect ip: $NVMEOF_IP_ADDRESS port: ${NVMEOF_IO_PORT} nqn: ${NQN}host using previous DHCHAP key"
+    set +e
+    make exec SVC=bdevperf OPTS=-T CMD="$rpc -v -s $BDEVPERF_SOCKET bdev_nvme_attach_controller -b Nvme4 -t tcp -a $NVMEOF_IP_ADDRESS -s ${NVMEOF_IO_PORT} -f ipv4 -n ${NQN} -q ${NQN}host -l -1 -o 10 --dhchap-key key1"
+    if [[ $? -eq 0 ]]; then
+        echo "Connecting using the previous DHCAP key should fail"
+        exit 1
+    fi
+    set -e
+
+    echo "ℹ️  bdevperf tcp connect ip: $NVMEOF_IP_ADDRESS port: ${NVMEOF_IO_PORT} nqn: ${NQN}host using the new DHCHAP key"
+    make exec SVC=bdevperf OPTS=-T CMD="$rpc -v -s $BDEVPERF_SOCKET bdev_nvme_attach_controller -b Nvme5 -t tcp -a $NVMEOF_IP_ADDRESS -s ${NVMEOF_IO_PORT} -f ipv4 -n ${NQN} -q ${NQN}host -l -1 -o 10 --dhchap-key key4"
+    make exec SVC=bdevperf OPTS=-T CMD="$rpc -v -s $BDEVPERF_SOCKET bdev_nvme_detach_controller Nvme5"
+
     echo "ℹ️  verify DHCHAP key files removal"
     dhchap_key_list=`make -s exec SVC=nvmeof OPTS=-T CMD="/usr/local/bin/spdk_rpc -s /var/tmp/spdk.sock keyring_get_keys"`
     path1=`echo ${dhchap_key_list} | jq -r '.[0].path'`
     path2=`echo ${dhchap_key_list} | jq -r '.[1].path'`
     path3=`echo ${dhchap_key_list} | jq -r '.[2].path'`
+    name1=`echo ${dhchap_key_list} | jq -r '.[0].name'`
+    name2=`echo ${dhchap_key_list} | jq -r '.[1].name'`
+    name3=`echo ${dhchap_key_list} | jq -r '.[2].name'`
+    [[ "$path1_pre" != "$path1" ]]
+    [[ "$path1_pre" != "$path2" ]]
+    [[ "$path1_pre" != "$path3" ]]
+    [[ "$name1_pre" != "$name1" ]]
+    [[ "$name1_pre" != "$name2" ]]
+    [[ "$name1_pre" == "$name3" ]]
+    [[ "$path2_pre" == "$path1" ]]
+    [[ "$name2_pre" == "$name1" ]]
+    [[ "$path3_pre" == "$path2" ]]
+    [[ "$name3_pre" == "$name2" ]]
+    [[ "$path3" != "$path1_pre" ]]
+    [[ "$path3" != "$path2_pre" ]]
+    [[ "$path3" != "$path3_pre" ]]
     subsys_dir=`dirname ${path1}`
     [[ `echo $dhchap_key_list | jq -r '.[0].removed'` == "false" ]]
     [[ `echo $dhchap_key_list | jq -r '.[1].removed'` == "false" ]]
@@ -441,11 +489,11 @@ function demo_bdevperf_dhchap()
     make exec SVC=nvmeof OPTS=-T CMD="test -f ${path3}"
     make exec SVC=nvmeof OPTS=-T CMD="test -d ${subsys_dir}"
     cephnvmf_func host del --subsystem $NQN --host-nqn ${NQN}host2
-    make exec SVC=nvmeof OPTS=-T CMD="test -f ${path1}"
-    make exec SVC=nvmeof OPTS=-T CMD="test ! -f ${path2}"
-    make exec SVC=nvmeof OPTS=-T CMD="test ! -f ${path3}"
-    cephnvmf_func subsystem del --subsystem $NQN --force
     make exec SVC=nvmeof OPTS=-T CMD="test ! -f ${path1}"
+    make exec SVC=nvmeof OPTS=-T CMD="test ! -f ${path2}"
+    make exec SVC=nvmeof OPTS=-T CMD="test -f ${path3}"
+    cephnvmf_func subsystem del --subsystem $NQN --force
+    make exec SVC=nvmeof OPTS=-T CMD="test ! -f ${path3}"
     make exec SVC=nvmeof OPTS=-T CMD="test ! -d ${subsys_dir}"
     dhchap_key_list=`make -s exec SVC=nvmeof OPTS=-T CMD="/usr/local/bin/spdk_rpc -s /var/tmp/spdk.sock keyring_get_keys"`
     [[ `echo $dhchap_key_list | jq -r '.[0]'` == "null" ]]

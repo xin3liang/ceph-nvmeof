@@ -72,6 +72,9 @@ service Gateway {
 	// Removes a host from a subsystem
 	rpc remove_host(remove_host_req) returns (req_status) {}
 
+	// Changes a host inband authentication keys
+	rpc change_host_keys(change_host_keys_req) returns (req_status) {}
+
 	// List hosts
 	rpc list_hosts(list_hosts_req) returns(hosts_info) {}
 
@@ -204,6 +207,13 @@ message add_host_req {
 	optional string psk = 3;
 	optional string dhchap_key = 4;
 	optional string dhchap_ctrlr_key = 5;
+}
+
+message change_host_keys_req {
+	string subsystem_nqn = 1;
+	string host_nqn = 2;
+	optional string dhchap_key = 3;
+	optional string dhchap_ctrlr_key = 4;
 }
 
 message remove_host_req {
