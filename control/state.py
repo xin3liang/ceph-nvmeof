@@ -31,10 +31,11 @@ class GatewayState(ABC):
     NAMESPACE_PREFIX = "namespace" + OMAP_KEY_DELIMITER
     SUBSYSTEM_PREFIX = "subsystem" + OMAP_KEY_DELIMITER
     HOST_PREFIX = "host" + OMAP_KEY_DELIMITER
+    HOST_KEYS_PREFIX = "keys-host" + OMAP_KEY_DELIMITER
     LISTENER_PREFIX = "listener" + OMAP_KEY_DELIMITER
     NAMESPACE_QOS_PREFIX = "qos" + OMAP_KEY_DELIMITER
     NAMESPACE_LB_GROUP_PREFIX = "lbgroup" + OMAP_KEY_DELIMITER
-    NAMESPACE_HOST_PREFIX = "ns_host" + OMAP_KEY_DELIMITER
+    NAMESPACE_HOST_PREFIX = "ns-host" + OMAP_KEY_DELIMITER
 
     def is_key_element_valid(s: str) -> bool:
         if type(s) != str:
@@ -73,6 +74,12 @@ class GatewayState(ABC):
 
     def build_host_key(subsystem_nqn: str, host_nqn: str) -> str:
         key = GatewayState.HOST_PREFIX + subsystem_nqn
+        if host_nqn is not None:
+            key += GatewayState.OMAP_KEY_DELIMITER + host_nqn
+        return key
+
+    def build_host_keys_key(subsystem_nqn: str, host_nqn: str) -> str:
+        key = GatewayState.HOST_KEYS_PREFIX + subsystem_nqn
         if host_nqn is not None:
             key += GatewayState.OMAP_KEY_DELIMITER + host_nqn
         return key
@@ -750,6 +757,39 @@ class GatewayStateHandler:
             return (False, None)
         return (True, new_req.anagrpid)
 
+    def host_only_keys_changed(self, old_val, new_val):
+        old_req = None
+        new_req = None
+        try:
+            old_req = json_format.Parse(old_val, pb2.add_host_req(), ignore_unknown_fields=True )
+        except Exception as ex:
+            self.logger.exception(f"Got exception parsing {old_val}")
+            return (False, None, None)
+        try:
+            new_req = json_format.Parse(new_val, pb2.add_host_req(), ignore_unknown_fields=True)
+        except Exception as ex:
+            self.logger.exeption(f"Got exception parsing {new_val}")
+            return (False, None, None)
+        if not old_req or not new_req:
+            self.logger.debug(f"Failed to parse requests, old: {old_val} -> {old_req}, new: {new_val} -> {new_req}")
+            return (False, None, None)
+        assert old_req != new_req, f"Something was wrong we shouldn't get identical old and new values ({old_req})"
+        # Because of Json formatting of empty fields we might get a difference here, so just use the same values for empty
+        if not old_req.dhchap_key:
+            old_req.dhchap_key = ""
+        if not old_req.dhchap_ctrlr_key:
+            old_req.dhchap_ctrlr_key = ""
+        if not new_req.dhchap_key:
+            new_req.dhchap_key = ""
+        if not new_req.dhchap_ctrlr_key:
+            new_req.dhchap_ctrlr_key = ""
+        old_req.dhchap_key = new_req.dhchap_key
+        old_req.dhchap_ctrlr_key = new_req.dhchap_ctrlr_key
+        if old_req != new_req:
+            # Something besides the keys is different
+            return (False, None, None)
+        return (True, new_req.dhchap_key, new_req.dhchap_ctrlr_key)
+
     def break_namespace_key(self, ns_key: str):
         if not ns_key.startswith(GatewayState.NAMESPACE_PREFIX):
             self.logger.warning(f"Invalid namespace key \"{ns_key}\", can't find key parts")
@@ -770,6 +810,26 @@ class GatewayStateHandler:
             return (None, None)
 
         return (nqn, nsid)
+
+    def break_host_key(self, host_key: str):
+        if not host_key.startswith(GatewayState.HOST_PREFIX):
+            self.logger.warning(f"Invalid host key \"{host_key}\", can't find key parts")
+            return (None, None)
+        key_end = host_key[len(GatewayState.HOST_PREFIX) : ]
+        key_parts = key_end.split(GatewayState.OMAP_KEY_DELIMITER)
+        if len(key_parts) != 2:
+            self.logger.warning(f"Invalid host key \"{host_key}\", can't find key parts")
+            return (None, None)
+        if not GatewayUtils.is_valid_nqn(key_parts[0]):
+            self.logger.warning(f"Invalid subsystem NQN \"{key_parts[0]}\" found for host key \"{host_key}\", can't find key parts")
+            return (None, None)
+        subsys_nqn = key_parts[0]
+        if key_parts[1] != "*" and not GatewayUtils.is_valid_nqn(key_parts[1]):
+            self.logger.warning(f"Invalid host NQN \"{key_parts[0]}\" found for host key \"{host_key}\", can't find key parts")
+            return (None, None)
+        host_nqn = key_parts[1]
+
+        return (subsys_nqn, host_nqn)
 
     def get_str_from_bytes(val):
         val_str = val.decode() if type(val) == type(b'') else val
@@ -828,19 +888,31 @@ class GatewayStateHandler:
 
                 # Handle namespace changes in which only the load balancing group id was changed
                 only_lb_group_changed = []
+                only_keys_changed = []
                 ns_prefix = GatewayState.build_namespace_key("nqn", None)
+                host_prefix = GatewayState.build_host_key("nqn", None)
                 for key in changed.keys():
-                    if not key.startswith(ns_prefix):
-                        continue
-                    try:
-                        (should_process, new_lb_grp_id) = self.namespace_only_lb_group_id_changed(local_state_dict[key],
-                                                                                                  omap_state_dict[key])
-                        if should_process:
-                            assert new_lb_grp_id, "Shouldn't get here with en empty lb group id"
-                            self.logger.debug(f"Found {key} where only the load balancing group id has changed. The new group id is {new_lb_grp_id}")
-                            only_lb_group_changed.insert(0, (key, new_lb_grp_id))
-                    except Exception as ex:
-                        self.logger.warning("Got exception checking namespace for load balancing group id change")
+                    if key.startswith(ns_prefix):
+                        try:
+                            (should_process, new_lb_grp_id) = self.namespace_only_lb_group_id_changed(local_state_dict[key],
+                                                                                                      omap_state_dict[key])
+                            if should_process:
+                                assert new_lb_grp_id, "Shouldn't get here with an empty lb group id"
+                                self.logger.debug(f"Found {key} where only the load balancing group id has changed. The new group id is {new_lb_grp_id}")
+                                only_lb_group_changed.insert(0, (key, new_lb_grp_id))
+                        except Exception as ex:
+                            self.logger.warning("Got exception checking namespace for load balancing group id change")
+                    elif key.startswith(host_prefix):
+                        try:
+                            (should_process,
+                             new_dhchap_key,
+                             new_dhchap_ctrl_key) = self.host_only_keys_changed(local_state_dict[key], omap_state_dict[key])
+                            if should_process:
+                                assert new_dhchap_key, "Shouldn't get here with an empty dhchap key"
+                                self.logger.debug(f"Found {key} where only the keys have changed. The new dhchap key is {new_dhchap_key}, the new dhchap controller key is {new_dhchap_ctrl_key}")
+                                only_keys_changed.insert(0, (key, new_dhchap_key, new_dhchap_ctrl_key))
+                        except Exception as ex:
+                            self.logger.warning("Got exception checking host for keys change")
 
                 for ns_key, new_lb_grp in only_lb_group_changed:
                     ns_nqn = None
@@ -861,9 +933,35 @@ class GatewayStateHandler:
                         except Exception as ex:
                             self.logger.error(f"Exception formatting change namespace load balancing group request:\n{ex}")
 
-                if len(only_lb_group_changed) > 0:
+                for host_key, new_dhchap_key, new_dhchap_ctrl_key in only_keys_changed:
+                    subsys_nqn = None
+                    host_nqn = None
+                    try:
+                        changed.pop(host_key)
+                        (subsys_nqn, host_nqn) = self.break_host_key(host_key)
+                    except Exception as ex:
+                        self.logger.error(f"Exception removing {host_key} from {changed}:\n{ex}")
+                    if host_nqn == "*":
+                        self.logger.warning(f"Something went wrong, host \"*\" can't have DH-HMAC-CHAP keys, ignore")
+                        continue
+                    if subsys_nqn and host_nqn:
+                        try:
+                            host_keys_key = GatewayState.build_host_keys_key(subsys_nqn, host_nqn)
+                            req = pb2.change_host_keys_req(subsystem_nqn=subsys_nqn, host_nqn=host_nqn,
+                                                                                dhchap_key=new_dhchap_key,
+                                                                                dhchap_ctrlr_key=new_dhchap_ctrl_key)
+                            json_req = json_format.MessageToJson(req, preserving_proto_field_name=True,
+                                                                 including_default_value_fields=True)
+                            added[host_keys_key] = json_req
+                        except Exception as ex:
+                            self.logger.error(f"Exception formatting change host keys request:\n{ex}")
+
+                if len(only_lb_group_changed) > 0 or len(only_keys_changed) > 0:
                     grouped_changed = self._group_by_prefix(changed, prefix_list)
-                    prefix_list += [GatewayState.NAMESPACE_LB_GROUP_PREFIX]
+                    if len(only_lb_group_changed) > 0:
+                        prefix_list += [GatewayState.NAMESPACE_LB_GROUP_PREFIX]
+                    if len(only_keys_changed) > 0:
+                        prefix_list += [GatewayState.HOST_KEYS_PREFIX]
                     grouped_added = self._group_by_prefix(added, prefix_list)
 
                 # Find OMAP removals

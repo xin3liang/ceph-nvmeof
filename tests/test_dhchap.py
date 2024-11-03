@@ -115,7 +115,7 @@ def test_create_secure_no_key(caplog, gateway):
         rc = int(str(sysex))
         pass
     assert rc == 2
-    assert f"error: argument --dhchap-key: expected one argument" in caplog.text
+    assert f"error: argument --dhchap-key/-k: expected one argument" in caplog.text
 
 def test_dhchap_controller_key(caplog, gateway):
     caplog.clear()
@@ -187,3 +187,56 @@ def test_list_listeners(caplog, gateway):
         else:
             assert False
     assert found == 2
+
+def test_add_key_to_host(caplog, gateway):
+    caplog.clear()
+    found = False
+    hosts = cli_test(["host", "list", "--subsystem", subsystem])
+    for h in hosts.hosts:
+        if h.nqn == hostnqn7:
+            found = True
+            assert not h.use_dhchap
+            break
+    assert found
+    caplog.clear()
+    cli(["host", "change_keys", "--subsystem", subsystem, "--host-nqn", hostnqn7, "--dhchap-key", hostdhchap6])
+    assert f"Changing keys for host {hostnqn7} on subsystem {subsystem}: Successful" in caplog.text
+    caplog.clear()
+    found = False
+    hosts = cli_test(["host", "list", "--subsystem", subsystem])
+    for h in hosts.hosts:
+        if h.nqn == hostnqn7:
+            found = True
+            assert h.use_dhchap
+            break
+    assert found
+
+def change_key_to_all_hosts(caplog, gateway):
+    caplog.clear()
+    rc = 0
+    try:
+        cli(["host", "change_keys", "--subsystem", subsystem, "--host-nqn", "*", "--dhchap-key", hostdhchap1])
+    except SystemExit as sysex:
+        rc = int(str(sysex))
+        pass
+    assert rc == 2
+    assert f"error: Can't change keys for host NQN '*', please use a real NQN" in caplog.text
+
+def change_key_just_controller(caplog, gateway):
+    caplog.clear()
+    rc = 0
+    try:
+        cli(["host", "change_keys", "--subsystem", subsystem, "--host-nqn", hostnqn7, "--dhchap-ctrlr-key", hostdhchap1])
+    except SystemExit as sysex:
+        rc = int(str(sysex))
+        pass
+    assert rc == 2
+    assert f"error: DH-HMAC-CHAP controller keys can not be used without DH-HMAC-CHAP keys" in caplog.text
+
+def change_key_for_host(caplog, gateway):
+    caplog.clear()
+    cli(["host", "change_keys", "--subsystem", subsystem, "--host-nqn", hostnqn7, "--dhchap-key", hostdhchap1])
+    assert f"Changing keys for host {hostnqn7} on subsystem {subsystem}: Successful" in caplog.text
+    caplog.clear()
+    cli(["host", "change_keys", "--subsystem", subsystem, "--host-nqn", hostnqn7, "--dhchap-key", hostdhchap1, "--dhchap-ctrlr-key", hostdhchap2])
+    assert f"Changing keys for host {hostnqn7} on subsystem {subsystem}: Successful" in caplog.text

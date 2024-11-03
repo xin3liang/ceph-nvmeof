@@ -1167,6 +1167,50 @@ class GatewayClient:
 
         return rc
 
+    def host_change_keys(self, args):
+        """Change host's inband authentication keys."""
+
+        rc = 0
+        out_func, err_func = self.get_output_functions(args)
+
+        if args.host_nqn == "*":
+            self.cli.parser.error(f"Can't change keys for host NQN '*', please use a real NQN")
+
+        if args.dhchap_ctrlr_key:
+            if not args.dhchap_key:
+                self.cli.parser.error(f"DH-HMAC-CHAP controller keys can not be used without DH-HMAC-CHAP keys")
+
+        req = pb2.change_host_keys_req(subsystem_nqn=args.subsystem, host_nqn=args.host_nqn,
+                                       dhchap_key=args.dhchap_key, dhchap_ctrlr_key=args.dhchap_ctrlr_key)
+        try:
+            ret = self.stub.change_host_keys(req)
+        except Exception as ex:
+            errmsg = f"Failure changing keys for host {args.host_nqn} on subsystem {args.subsystem}"
+            ret = pb2.req_status(status = errno.EINVAL, error_message = f"{errmsg}:\n{ex}")
+
+        if args.format == "text" or args.format == "plain":
+            if ret.status == 0:
+                out_func(f"Changing keys for host {args.host_nqn} on subsystem {args.subsystem}: Successful")
+            else:
+                err_func(f"{ret.error_message}")
+        elif args.format == "json" or args.format == "yaml":
+            ret_str = json_format.MessageToJson(
+                        ret,
+                        indent=4,
+                        including_default_value_fields=True,
+                        preserving_proto_field_name=True)
+            if args.format == "json":
+                out_func(f"{ret_str}")
+            elif args.format == "yaml":
+                obj = json.loads(ret_str)
+                out_func(yaml.dump(obj))
+        elif args.format == "python":
+            return ret
+        else:
+            assert False
+
+        return ret.status
+
     def host_list(self, args):
         """List a host for a subsystem."""
 
@@ -1223,19 +1267,25 @@ class GatewayClient:
     ]
     host_add_args = host_common_args + [
         argument("--host-nqn", "-t", help="Host NQN list", nargs="+", required=True),
-        argument("--psk", help="Hosts PSK key", required=False),
-        argument("--dhchap-key", help="Host DH-HMAC-CHAP key", required=False),
-        argument("--dhchap-ctrlr-key", help="Host DH-HMAC-CHAP controller key", required=False),
+        argument("--psk", "-p", help="Hosts PSK key", required=False),
+        argument("--dhchap-key", "-k", help="Host DH-HMAC-CHAP key", required=False),
+        argument("--dhchap-ctrlr-key", "-c", help="Host DH-HMAC-CHAP controller key", required=False),
     ]
     host_del_args = host_common_args + [
         argument("--host-nqn", "-t", help="Host NQN list", nargs="+", required=True),
     ]
     host_list_args = host_common_args + [
     ]
+    host_change_keys_args = host_common_args + [
+        argument("--host-nqn", "-t", help="Host NQN", required=True),
+        argument("--dhchap-key", "-k", help="Host DH-HMAC-CHAP key", required=False),
+        argument("--dhchap-ctrlr-key", "-c", help="Host DH-HMAC-CHAP controller key", required=False),
+    ]
     host_actions = []
     host_actions.append({"name" : "add", "args" : host_add_args, "help" : "Add host access to a subsystem"})
     host_actions.append({"name" : "del", "args" : host_del_args, "help" : "Remove host access from a subsystem"})
     host_actions.append({"name" : "list", "args" : host_list_args, "help" : "List subsystem's host access"})
+    host_actions.append({"name" : "change_keys", "args" : host_change_keys_args, "help" : "Change host's inband authentication keys"})
     host_choices = get_actions(host_actions)
     @cli.cmd(host_actions)
     def host(self, args):
@@ -1246,6 +1296,8 @@ class GatewayClient:
             return self.host_del(args)
         elif args.action == "list":
             return self.host_list(args)
+        elif args.action == "change_keys":
+            return self.host_change_keys(args)
         if not args.action:
             self.cli.parser.error(f"missing action for host command (choose from {GatewayClient.host_choices})")
 

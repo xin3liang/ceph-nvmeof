@@ -134,7 +134,7 @@ def test_create_secure_no_key(caplog, gateway):
         rc = int(str(sysex))
         pass
     assert rc == 2
-    assert f"error: argument --psk: expected one argument" in caplog.text
+    assert f"error: argument --psk/-p: expected one argument" in caplog.text
 
 def test_list_psk_hosts(caplog, gateway):
     caplog.clear()
