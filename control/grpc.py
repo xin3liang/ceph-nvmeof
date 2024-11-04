@@ -2320,11 +2320,6 @@ class GatewayService(pb2_grpc.GatewayServicer):
             self.logger.error(f"{errmsg}")
             return pb2.req_status(status=errno.EINVAL, error_message=errmsg)
 
-        if request.psk and request.dhchap_key:
-            errmsg=f"{host_failure_prefix}: PSK and DH-HMAC-CHAP keys are mutually exclusive"
-            self.logger.error(f"{errmsg}")
-            return pb2.req_status(status=errno.EINVAL, error_message=errmsg)
-
         host_already_exist = self.matching_host_exists(context, request.subsystem_nqn, request.host_nqn)
         if host_already_exist:
             if request.host_nqn == "*":
@@ -2607,13 +2602,6 @@ class GatewayService(pb2_grpc.GatewayServicer):
             errmsg=f"{failure_prefix}: Can't find host on subsystem"
             self.logger.error(f"{errmsg}")
             return pb2.req_status(status=errno.EINVAL, error_message=errmsg)
-
-        if request.dhchap_key:
-            psk = self.host_info.is_psk_host(request.subsystem_nqn, request.host_nqn)
-            if psk:
-                errmsg=f"{failure_prefix}: Can't set DH-HMAC-CHAP key to a a host with PSK key"
-                self.logger.error(f"{errmsg}")
-                return pb2.req_status(status=errno.EINVAL, error_message=errmsg)
 
         dhchap_file = None
         dhchap_key_name = None

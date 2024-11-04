@@ -22,6 +22,7 @@ discovery_nqn = "nqn.2014-08.org.nvmexpress.discovery"
 key1 = "DHHC-1:01:rPTE0Q73nd3hEqqEuQNaPL11G/aFXpOHtldWXz9vNCeef4WV:"
 key2 = "DHHC-1:01:eNNXGjidEHHStbUi2Gmpps0JcnofReFfy+NaulguGgt327hz:"
 key3 = "DHHC-1:01:KD+sfH3/o2bRQoV0ESjBUywQlMnSaYpZISUbVa0k0nsWpNST:"
+key4 = "DHHC-1:01:x7ecfGgIdOEl+J5cJ9JcZHOS2By2Me6eDJUnrsT9MVrCWRYV:"
 hostpsk1 = "NVMeTLSkey-1:01:YzrPElk4OYy1uUERriPwiiyEJE/+J5ckYpLB+5NHMsR2iBuT:"
 config = "ceph-nvmeof.conf"
 
@@ -87,6 +88,7 @@ def test_change_host_keys(caplog, two_gateways):
     assert f"Adding host {hostnqn2} to {subsystem}: Successful" in caplog.text
     caplog.clear()
     cli(["--server-port", "5501", "host", "change_keys", "--subsystem", subsystem, "--host-nqn", hostnqn1, "--dhchap-key", key2])
+    assert f"Changing keys for host {hostnqn1} on subsystem {subsystem}: Successful" in caplog.text
     time.sleep(15)
     assert f"Received request to change inband authentication keys for host {hostnqn1} on subsystem {subsystem}, dhchap: {key2}, dhchap controller: , context: <grpc._server" in caplog.text
     assert f"Received request to change inband authentication keys for host {hostnqn1} on subsystem {subsystem}, dhchap: {key2}, dhchap controller: , context: None" in caplog.text
@@ -107,8 +109,8 @@ def test_change_key_with_psk(caplog, two_gateways):
     cli(["--server-port", "5501", "host", "add", "--subsystem", subsystem, "--host-nqn", hostnqn3, "--psk", hostpsk1])
     assert f"Adding host {hostnqn3} to {subsystem}: Successful" in caplog.text
     caplog.clear()
-    cli(["--server-port", "5501", "host", "change_keys", "--subsystem", subsystem, "--host-nqn", hostnqn3, "--dhchap-key", "junk"])
-    assert f"Failure changing keys for host {hostnqn3} on subsystem {subsystem}: Can't set DH-HMAC-CHAP key to a a host with PSK key" in caplog.text
+    cli(["--server-port", "5501", "host", "change_keys", "--subsystem", subsystem, "--host-nqn", hostnqn3, "--dhchap-key", key4])
+    assert f"Changing keys for host {hostnqn3} on subsystem {subsystem}: Successful" in caplog.text
 
 def test_change_key_host_not_exist(caplog, two_gateways):
     gatewayA, stubA, gatewayB, stubB = two_gateways
