@@ -31,6 +31,8 @@ hostpsk2 = "NVMeTLSkey-1:02:FTFds4vH4utVcfrOforxbrWIgv+Qq4GQHgMdWwzDdDxE1bAqK2mO
 hostpsk3 = "junk" 
 hostpsk4 = "NVMeTLSkey-1:01:YzrPElk4OYy1uUERriPwiiyEJE/+J5ckYpLB+5NHMsR2iBuT:"
 
+hostdhchap1 = "DHHC-1:00:MWPqcx1Ug1debg8fPIGpkqbQhLcYUt39k7UWirkblaKEH1kE:"
+
 host_name = socket.gethostname()
 addr = "127.0.0.1"
 config = "ceph-nvmeof.conf"
@@ -69,17 +71,13 @@ def test_setup(caplog, gateway):
     cli(["namespace", "add", "--subsystem", subsystem, "--rbd-pool", pool, "--rbd-image", image, "--rbd-create-image", "--size", "16MB"])
     assert f"Adding namespace 1 to {subsystem}: Successful" in caplog.text
 
-def test_allow_any_host(caplog, gateway):
+def test_create_secure_with_any_host(caplog, gateway):
     caplog.clear()
     cli(["host", "add", "--subsystem", subsystem, "--host-nqn", "*"])
     assert f"Allowing open host access to {subsystem}: Successful" in caplog.text
-
-def test_create_secure_with_any_host(caplog, gateway):
     caplog.clear()
     cli(["listener", "add", "--subsystem", subsystem, "--host-name", host_name, "-a", addr, "-s", "5001", "--secure"])
     assert f"Secure channel is only allowed for subsystems in which \"allow any host\" is off" in caplog.text
-
-def test_remove_any_host_access(caplog, gateway):
     caplog.clear()
     cli(["host", "del", "--subsystem", subsystem, "--host-nqn", "*"])
     assert f"Disabling open host access to {subsystem}: Successful" in caplog.text
@@ -174,14 +172,8 @@ def test_allow_any_host_with_psk(caplog, gateway):
 
 def test_psk_with_dhchap(caplog, gateway):
     caplog.clear()
-    rc = 0
-    try:
-        cli(["host", "add", "--subsystem", subsystem, "--host-nqn", hostnqn10, "--psk", hostpsk1, "--dhchap-key", "junk"])
-    except SystemExit as sysex:
-        rc = int(str(sysex))
-        pass
-    assert rc == 2
-    assert f"error: PSK and DH-HMAC-CHAP keys are mutually exclusive" in caplog.text
+    cli(["host", "add", "--subsystem", subsystem, "--host-nqn", hostnqn10, "--psk", hostpsk1, "--dhchap-key", hostdhchap1])
+    assert f"Adding host {hostnqn10} to {subsystem}: Successful" in caplog.text
 
 def test_list_listeners(caplog, gateway):
     caplog.clear()

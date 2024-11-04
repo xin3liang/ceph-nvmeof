@@ -1056,8 +1056,6 @@ class GatewayClient:
         if args.psk:
             if len(args.host_nqn) > 1:
                 self.cli.parser.error(f"Can't have more than one host NQN when PSK keys are used")
-            if args.dhchap_key:
-                self.cli.parser.error(f"PSK and DH-HMAC-CHAP keys are mutually exclusive")
 
         if args.dhchap_key:
             if len(args.host_nqn) > 1:

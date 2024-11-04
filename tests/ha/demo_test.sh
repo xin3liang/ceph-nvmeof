@@ -46,12 +46,16 @@ function demo_test_dhchap()
     echo -n "${DHCHAP_KEY5}" > /tmp/temp-dhchap/dhchap/${NQN}/key2
     echo -n "${DHCHAP_KEY6}" > /tmp/temp-dhchap/dhchap/${NQN}/key3
     echo -n "${DHCHAP_KEY7}" > /tmp/temp-dhchap/dhchap/${NQN}/key4
+    echo -n "${DHCHAP_KEY8}" > /tmp/temp-dhchap/dhchap/${NQN}/key5
+    echo -n "${PSK_KEY1}" > /tmp/temp-dhchap/dhchap/${NQN}/key6
     chmod 0600 /tmp/temp-dhchap/dhchap/${NQN}/key1
     chmod 0600 /tmp/temp-dhchap/dhchap/${NQN}/key2
     chmod 0600 /tmp/temp-dhchap/dhchap/${NQN}/key3
     chmod 0600 /tmp/temp-dhchap/dhchap/${NQN}/key4
+    chmod 0600 /tmp/temp-dhchap/dhchap/${NQN}/key5
+    chmod 0600 /tmp/temp-dhchap/dhchap/${NQN}/key6
 
-    make demosecuredhchap OPTS=-T HOSTNQN="${NQN}host" HOSTNQN2="${NQN}host2" HOSTNQN3="${NQN}host3" NVMEOF_IO_PORT2=${port2} NVMEOF_IO_PORT3=${port3} DHCHAPKEY1="${DHCHAP_KEY4}" DHCHAPKEY2="${DHCHAP_KEY5}" DHCHAPKEY3="${DHCHAP_KEY6}"
+    make demosecuredhchap OPTS=-T HOSTNQN="${NQN}host" HOSTNQN2="${NQN}host2" HOSTNQN3="${NQN}host3" HOSTNQN4="${NQN}host4" NVMEOF_IO_PORT2=${port2} NVMEOF_IO_PORT3=${port3} NVMEOF_IO_PORT4=${port4} DHCHAPKEY1="${DHCHAP_KEY4}" DHCHAPKEY2="${DHCHAP_KEY5}" DHCHAPKEY3="${DHCHAP_KEY6}" DHCHAPKEY4="${DHCHAP_KEY8}" PSKKEY1="${PSK_KEY1}"
 }
 
 function demo_bdevperf_unsecured()
@@ -321,6 +325,8 @@ function demo_bdevperf_dhchap()
     make exec SVC=bdevperf OPTS=-T CMD="chmod 0600 ${dhchap_path}/key2"
     make exec SVC=bdevperf OPTS=-T CMD="chmod 0600 ${dhchap_path}/key3"
     make exec SVC=bdevperf OPTS=-T CMD="chmod 0600 ${dhchap_path}/key4"
+    make exec SVC=bdevperf OPTS=-T CMD="chmod 0600 ${dhchap_path}/key5"
+    make exec SVC=bdevperf OPTS=-T CMD="chmod 0600 ${dhchap_path}/key6"
     rm -rf /tmp/temp-dhchap
 
     echo "ℹ️  bdevperf add DHCHAP key name key1 to keyring"
@@ -331,6 +337,10 @@ function demo_bdevperf_dhchap()
     make -s exec SVC=bdevperf OPTS=-T CMD="$rpc -v -s $BDEVPERF_SOCKET keyring_file_add_key key3 ${dhchap_path}/key3"
     echo "ℹ️  bdevperf add DHCHAP key name key4 to keyring"
     make -s exec SVC=bdevperf OPTS=-T CMD="$rpc -v -s $BDEVPERF_SOCKET keyring_file_add_key key4 ${dhchap_path}/key4"
+    echo "ℹ️  bdevperf add DHCHAP key name key5 to keyring"
+    make -s exec SVC=bdevperf OPTS=-T CMD="$rpc -v -s $BDEVPERF_SOCKET keyring_file_add_key key5 ${dhchap_path}/key5"
+    echo "ℹ️  bdevperf add DHCHAP key name key6 to keyring"
+    make -s exec SVC=bdevperf OPTS=-T CMD="$rpc -v -s $BDEVPERF_SOCKET keyring_file_add_key key6 ${dhchap_path}/key6"
 
     echo "ℹ️  bdevperf list keyring"
     make -s exec SVC=bdevperf OPTS=-T CMD="$rpc -s $BDEVPERF_SOCKET keyring_get_keys"
@@ -414,7 +424,18 @@ function demo_bdevperf_dhchap()
     [[ `echo $conns | jq -r '.connections[2].use_psk'` == "false" ]]
     [[ `echo $conns | jq -r '.connections[2].use_dhchap'` == "false" ]]
 
-    [[ `echo $conns | jq -r '.connections[3]'` == "null" ]]
+    [[ `echo $conns | jq -r '.connections[3].nqn'` == "${NQN}host4" ]]
+    [[ `echo $conns | jq -r '.connections[3].trsvcid'` == 0 ]]
+    [[ `echo $conns | jq -r '.connections[3].traddr'` == "<n/a>" ]]
+    [[ `echo $conns | jq -r '.connections[3].adrfam'` == "ipv4" ]]
+    [[ `echo $conns | jq -r '.connections[3].trtype'` == "" ]]
+    [[ `echo $conns | jq -r '.connections[3].qpairs_count'` == -1 ]]
+    [[ `echo $conns | jq -r '.connections[3].controller_id'` == -1 ]]
+    [[ `echo $conns | jq -r '.connections[3].connected'` == "false" ]]
+    [[ `echo $conns | jq -r '.connections[3].use_psk'` == "true" ]]
+    [[ `echo $conns | jq -r '.connections[3].use_dhchap'` == "true" ]]
+
+    [[ `echo $conns | jq -r '.connections[4]'` == "null" ]]
 
     echo "ℹ️  bdevperf perform_tests"
     eval $(make run SVC=bdevperf OPTS="--entrypoint=env" | grep BDEVPERF_TEST_DURATION | tr -d '\n\r' )
@@ -436,10 +457,15 @@ function demo_bdevperf_dhchap()
     path1_pre=`echo ${dhchap_key_list_pre_change} | jq -r '.[0].path'`
     path2_pre=`echo ${dhchap_key_list_pre_change} | jq -r '.[1].path'`
     path3_pre=`echo ${dhchap_key_list_pre_change} | jq -r '.[2].path'`
+    path4_pre=`echo ${dhchap_key_list_pre_change} | jq -r '.[3].path'`
     name1_pre=`echo ${dhchap_key_list_pre_change} | jq -r '.[0].name'`
     name2_pre=`echo ${dhchap_key_list_pre_change} | jq -r '.[1].name'`
     name3_pre=`echo ${dhchap_key_list_pre_change} | jq -r '.[2].name'`
+    name4_pre=`echo ${dhchap_key_list_pre_change} | jq -r '.[3].name'`
+    name5_pre=`echo ${dhchap_key_list_pre_change} | jq -r '.[4].name'`
+    [[ `echo $dhchap_key_list_pre_change | jq -r '.[4].removed'` == "true" ]]
     make exec SVC=nvmeof OPTS=-T CMD="test -f ${path1_pre}"
+    make exec SVC=nvmeof OPTS=-T CMD="test -f ${path4_pre}"
 
     echo "ℹ️  change the key for host ${NQN}host"
     cephnvmf_func host change_keys --subsystem $NQN --host-nqn ${NQN}host --dhchap-key "${DHCHAP_KEY7}"
@@ -458,42 +484,120 @@ function demo_bdevperf_dhchap()
     make exec SVC=bdevperf OPTS=-T CMD="$rpc -v -s $BDEVPERF_SOCKET bdev_nvme_attach_controller -b Nvme5 -t tcp -a $NVMEOF_IP_ADDRESS -s ${NVMEOF_IO_PORT} -f ipv4 -n ${NQN} -q ${NQN}host -l -1 -o 10 --dhchap-key key4"
     make exec SVC=bdevperf OPTS=-T CMD="$rpc -v -s $BDEVPERF_SOCKET bdev_nvme_detach_controller Nvme5"
 
+    echo "ℹ️  bdevperf tcp connect ip: $NVMEOF_IP_ADDRESS port: ${port4} nqn: ${NQN}host4 using no PSK key"
+    set +e
+    make exec SVC=bdevperf OPTS=-T CMD="$rpc -v -s $BDEVPERF_SOCKET bdev_nvme_attach_controller -b Nvme6 -t tcp -a $NVMEOF_IP_ADDRESS -s ${port4} -f ipv4 -n ${NQN} -q ${NQN}host4 -l -1 -o 10 --dhchap-key key5"
+    if [[ $? -eq 0 ]]; then
+        echo "Connecting using no PSK key should fail"
+        exit 1
+    fi
+    set -e
+
+    echo "ℹ️  bdevperf tcp connect ip: $NVMEOF_IP_ADDRESS port: ${port4} nqn: ${NQN}host4 using PSK key"
+    make exec SVC=bdevperf OPTS=-T CMD="$rpc -v -s $BDEVPERF_SOCKET bdev_nvme_attach_controller -b Nvme6 -t tcp -a $NVMEOF_IP_ADDRESS -s ${port4} -f ipv4 -n ${NQN} -q ${NQN}host4 -l -1 -o 10 --dhchap-key key5 --psk key6"
+
+    echo "ℹ️  verify connection list with PSK"
+    conns=`cephnvmf_func --output stdio --format json connection list --subsystem $NQN`
+
+    [[ `echo $conns | jq -r '.status'` == "0" ]]
+    [[ `echo $conns | jq -r '.subsystem_nqn'` == "${NQN}" ]]
+
+    [[ `echo $conns | jq -r '.connections[0].nqn'` == "${NQN}host4" ]]
+    [[ `echo $conns | jq -r '.connections[0].trsvcid'` == "${port4}" ]]
+    [[ `echo $conns | jq -r '.connections[0].traddr'` == "${NVMEOF_IP_ADDRESS}" ]]
+    [[ `echo $conns | jq -r '.connections[0].adrfam'` == "ipv4" ]]
+    [[ `echo $conns | jq -r '.connections[0].trtype'` == "TCP" ]]
+    [[ `echo $conns | jq -r '.connections[0].qpairs_count'` == "1" ]]
+    [[ `echo $conns | jq -r '.connections[0].controller_id'` == "9" ]]
+    [[ `echo $conns | jq -r '.connections[0].connected'` == "true" ]]
+    [[ `echo $conns | jq -r '.connections[0].secure'` == "true" ]]
+    [[ `echo $conns | jq -r '.connections[0].use_psk'` == "true" ]]
+    [[ `echo $conns | jq -r '.connections[0].use_dhchap'` == "true" ]]
+
+    [[ `echo $conns | jq -r '.connections[1].nqn'` == "${NQN}host3" ]]
+    [[ `echo $conns | jq -r '.connections[1].trsvcid'` == 0 ]]
+    [[ `echo $conns | jq -r '.connections[1].traddr'` == "<n/a>" ]]
+    [[ `echo $conns | jq -r '.connections[1].adrfam'` == "ipv4" ]]
+    [[ `echo $conns | jq -r '.connections[1].trtype'` == "" ]]
+    [[ `echo $conns | jq -r '.connections[1].qpairs_count'` == -1 ]]
+    [[ `echo $conns | jq -r '.connections[1].controller_id'` == -1 ]]
+    [[ `echo $conns | jq -r '.connections[1].connected'` == "false" ]]
+    [[ `echo $conns | jq -r '.connections[1].use_psk'` == "false" ]]
+    [[ `echo $conns | jq -r '.connections[1].use_dhchap'` == "false" ]]
+
+    [[ `echo $conns | jq -r '.connections[2].nqn'` == "${NQN}host2" ]]
+    [[ `echo $conns | jq -r '.connections[2].trsvcid'` == 0 ]]
+    [[ `echo $conns | jq -r '.connections[2].traddr'` == "<n/a>" ]]
+    [[ `echo $conns | jq -r '.connections[2].adrfam'` == "ipv4" ]]
+    [[ `echo $conns | jq -r '.connections[2].trtype'` == "" ]]
+    [[ `echo $conns | jq -r '.connections[2].qpairs_count'` == -1 ]]
+    [[ `echo $conns | jq -r '.connections[2].controller_id'` == -1 ]]
+    [[ `echo $conns | jq -r '.connections[2].connected'` == "false" ]]
+    [[ `echo $conns | jq -r '.connections[2].use_psk'` == "false" ]]
+    [[ `echo $conns | jq -r '.connections[2].use_dhchap'` == "true" ]]
+
+    [[ `echo $conns | jq -r '.connections[3].nqn'` == "${NQN}host" ]]
+    [[ `echo $conns | jq -r '.connections[3].trsvcid'` == 0 ]]
+    [[ `echo $conns | jq -r '.connections[3].traddr'` == "<n/a>" ]]
+    [[ `echo $conns | jq -r '.connections[3].adrfam'` == "ipv4" ]]
+    [[ `echo $conns | jq -r '.connections[3].trtype'` == "" ]]
+    [[ `echo $conns | jq -r '.connections[3].qpairs_count'` == -1 ]]
+    [[ `echo $conns | jq -r '.connections[3].controller_id'` == -1 ]]
+    [[ `echo $conns | jq -r '.connections[3].connected'` == "false" ]]
+    [[ `echo $conns | jq -r '.connections[3].use_psk'` == "false" ]]
+    [[ `echo $conns | jq -r '.connections[3].use_dhchap'` == "true" ]]
+
+    [[ `echo $conns | jq -r '.connections[4]'` == "null" ]]
+
     echo "ℹ️  verify DHCHAP key files removal"
     dhchap_key_list=`make -s exec SVC=nvmeof OPTS=-T CMD="/usr/local/bin/spdk_rpc -s /var/tmp/spdk.sock keyring_get_keys"`
     path1=`echo ${dhchap_key_list} | jq -r '.[0].path'`
     path2=`echo ${dhchap_key_list} | jq -r '.[1].path'`
     path3=`echo ${dhchap_key_list} | jq -r '.[2].path'`
+    path4=`echo ${dhchap_key_list} | jq -r '.[3].path'`
     name1=`echo ${dhchap_key_list} | jq -r '.[0].name'`
     name2=`echo ${dhchap_key_list} | jq -r '.[1].name'`
     name3=`echo ${dhchap_key_list} | jq -r '.[2].name'`
+    name4=`echo ${dhchap_key_list} | jq -r '.[3].name'`
+    name5=`echo ${dhchap_key_list} | jq -r '.[4].name'`
     [[ "$path1_pre" != "$path1" ]]
     [[ "$path1_pre" != "$path2" ]]
     [[ "$path1_pre" != "$path3" ]]
+    [[ "$path1_pre" != "$path4" ]]
     [[ "$name1_pre" != "$name1" ]]
     [[ "$name1_pre" != "$name2" ]]
-    [[ "$name1_pre" == "$name3" ]]
+    [[ "$name1_pre" != "$name3" ]]
+    [[ "$name1_pre" == "$name4" ]]
+    [[ "$name1_pre" != "$name5" ]]
     [[ "$path2_pre" == "$path1" ]]
     [[ "$name2_pre" == "$name1" ]]
     [[ "$path3_pre" == "$path2" ]]
     [[ "$name3_pre" == "$name2" ]]
-    [[ "$path3" != "$path1_pre" ]]
+    [[ "$path4_pre" == "$path3" ]]
+    [[ "$name4_pre" == "$name3" ]]
+    [[ "$name5_pre" == "$name5" ]]
     [[ "$path3" != "$path2_pre" ]]
     [[ "$path3" != "$path3_pre" ]]
     subsys_dir=`dirname ${path1}`
     [[ `echo $dhchap_key_list | jq -r '.[0].removed'` == "false" ]]
     [[ `echo $dhchap_key_list | jq -r '.[1].removed'` == "false" ]]
     [[ `echo $dhchap_key_list | jq -r '.[2].removed'` == "false" ]]
-    [[ `echo $dhchap_key_list | jq -r '.[3].removed'` == "null" ]]
+    [[ `echo $dhchap_key_list | jq -r '.[3].removed'` == "false" ]]
+    [[ `echo $dhchap_key_list | jq -r '.[4].removed'` == "true" ]]
+    [[ `echo $dhchap_key_list | jq -r '.[5].removed'` == "null" ]]
     make exec SVC=nvmeof OPTS=-T CMD="test -f ${path1}"
     make exec SVC=nvmeof OPTS=-T CMD="test -f ${path2}"
     make exec SVC=nvmeof OPTS=-T CMD="test -f ${path3}"
+    make exec SVC=nvmeof OPTS=-T CMD="test -f ${path4}"
     make exec SVC=nvmeof OPTS=-T CMD="test -d ${subsys_dir}"
     cephnvmf_func host del --subsystem $NQN --host-nqn ${NQN}host2
     make exec SVC=nvmeof OPTS=-T CMD="test ! -f ${path1}"
     make exec SVC=nvmeof OPTS=-T CMD="test ! -f ${path2}"
     make exec SVC=nvmeof OPTS=-T CMD="test -f ${path3}"
+    make exec SVC=nvmeof OPTS=-T CMD="test -f ${path4}"
     cephnvmf_func subsystem del --subsystem $NQN --force
     make exec SVC=nvmeof OPTS=-T CMD="test ! -f ${path3}"
+    make exec SVC=nvmeof OPTS=-T CMD="test ! -f ${path4}"
     make exec SVC=nvmeof OPTS=-T CMD="test ! -d ${subsys_dir}"
     dhchap_key_list=`make -s exec SVC=nvmeof OPTS=-T CMD="/usr/local/bin/spdk_rpc -s /var/tmp/spdk.sock keyring_get_keys"`
     [[ `echo $dhchap_key_list | jq -r '.[0]'` == "null" ]]
@@ -508,6 +612,7 @@ set -x
 rpc="/usr/libexec/spdk/scripts/rpc.py"
 port2=`expr ${NVMEOF_IO_PORT} + 10`
 port3=`expr ${NVMEOF_IO_PORT} + 20`
+port4=`expr ${NVMEOF_IO_PORT} + 30`
 case "$1" in
     test_unsecured)
         demo_test_unsecured
