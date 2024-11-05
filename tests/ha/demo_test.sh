@@ -7,7 +7,7 @@ function cephnvmf_func()
 
 function demo_test_unsecured()
 {
-    make demo OPTS=-T
+    make demo OPTS=-T NVMEOF_IO_PORT2=${port2}
     return $?
 }
 
@@ -125,8 +125,39 @@ function demo_bdevperf_unsecured()
     [[ `echo $conns | jq -r '.connections[0].use_dhchap'` == "false" ]]
     [[ `echo $conns | jq -r '.connections[1]'` == "null" ]]
 
-    echo "ℹ️  bdevperf detach controller"
+    echo "ℹ️  bdevperf tcp connect ip: $NVMEOF_IP_ADDRESS port: ${port2} nqn: $NQN, using any host listener"
+    localhostnqn=`cat /etc/nvme/hostnqn`
+    devs=`make exec -s SVC=bdevperf OPTS=-T CMD="$rpc -v -s $BDEVPERF_SOCKET bdev_nvme_attach_controller -b Nvme1 -t tcp -a $NVMEOF_IP_ADDRESS -s ${port2} -f ipv4 -n $NQN -q $localhostnqn -l -1 -o 10"`
+
+    echo "ℹ️  verify connection list"
+    conns=$(cephnvmf_func --output stdio --format json connection list --subsystem $NQN)
+    [[ `echo $conns | jq -r '.status'` == "0" ]]
+    [[ `echo $conns | jq -r '.subsystem_nqn'` == "${NQN}" ]]
+    [[ `echo $conns | jq -r '.connections[0].nqn'` == "${localhostnqn}" ]]
+    [[ `echo $conns | jq -r '.connections[0].trsvcid'` == "${NVMEOF_IO_PORT}" ]]
+    [[ `echo $conns | jq -r '.connections[0].traddr'` == "${NVMEOF_IP_ADDRESS}" ]]
+    [[ `echo $conns | jq -r '.connections[0].adrfam'` == "ipv4" ]]
+    [[ `echo $conns | jq -r '.connections[0].trtype'` == "TCP" ]]
+    [[ `echo $conns | jq -r '.connections[0].connected'` == "true" ]]
+    [[ `echo $conns | jq -r '.connections[0].qpairs_count'` == "1" ]]
+    [[ `echo $conns | jq -r '.connections[0].secure'` == "false" ]]
+    [[ `echo $conns | jq -r '.connections[0].use_psk'` == "false" ]]
+    [[ `echo $conns | jq -r '.connections[0].use_dhchap'` == "false" ]]
+    [[ `echo $conns | jq -r '.connections[1].nqn'` == "${localhostnqn}" ]]
+    [[ `echo $conns | jq -r '.connections[1].trsvcid'` == "${port2}" ]]
+    [[ `echo $conns | jq -r '.connections[1].traddr'` == "${NVMEOF_IP_ADDRESS}" ]]
+    [[ `echo $conns | jq -r '.connections[1].adrfam'` == "ipv4" ]]
+    [[ `echo $conns | jq -r '.connections[1].trtype'` == "TCP" ]]
+    [[ `echo $conns | jq -r '.connections[1].connected'` == "true" ]]
+    [[ `echo $conns | jq -r '.connections[1].qpairs_count'` == "1" ]]
+    [[ `echo $conns | jq -r '.connections[1].secure'` == "false" ]]
+    [[ `echo $conns | jq -r '.connections[1].use_psk'` == "false" ]]
+    [[ `echo $conns | jq -r '.connections[1].use_dhchap'` == "false" ]]
+    [[ `echo $conns | jq -r '.connections[2]'` == "null" ]]
+
+    echo "ℹ️  bdevperf detach controllers"
     make exec SVC=bdevperf OPTS=-T CMD="$rpc -v -s $BDEVPERF_SOCKET bdev_nvme_detach_controller Nvme0"
+    make exec SVC=bdevperf OPTS=-T CMD="$rpc -v -s $BDEVPERF_SOCKET bdev_nvme_detach_controller Nvme1"
 
     echo "ℹ️  bdevperf tcp connect ip: $NVMEOF_IPV6_ADDRESS port: $NVMEOF_IO_PORT nqn: $NQN, using IPv6"
     make exec -s SVC=bdevperf OPTS=-T CMD="$rpc -v -s $BDEVPERF_SOCKET bdev_nvme_attach_controller -b Nvme1 -t tcp -a $NVMEOF_IPV6_ADDRESS -s $NVMEOF_IO_PORT -f ipv6 -n $NQN -q $localhostnqn -l -1 -o 10"
