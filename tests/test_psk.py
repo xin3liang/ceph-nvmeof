@@ -25,6 +25,8 @@ hostnqn7 = "nqn.2014-08.org.nvmexpress:uuid:22207d09-d8af-4ed2-84ec-a6d80b0cf7f1
 hostnqn8 = "nqn.2014-08.org.nvmexpress:uuid:22207d09-d8af-4ed2-84ec-a6d80b0cf7f2"
 hostnqn9 = "nqn.2014-08.org.nvmexpress:uuid:22207d09-d8af-4ed2-84ec-a6d80b0cf7f3"
 hostnqn10 = "nqn.2014-08.org.nvmexpress:uuid:22207d09-d8af-4ed2-84ec-a6d80b0cf7f4"
+hostnqn11 = "nqn.2014-08.org.nvmexpress:uuid:22207d09-d8af-4ed2-84ec-a6d80b0cf7f5"
+hostnqn12 = "nqn.2014-08.org.nvmexpress:uuid:22207d09-d8af-4ed2-84ec-a6d80b0cf7f6"
 
 hostpsk1 = "NVMeTLSkey-1:01:YzrPElk4OYy1uUERriPwiiyEJE/+J5ckYpLB+5NHMsR2iBuT:"
 hostpsk2 = "NVMeTLSkey-1:02:FTFds4vH4utVcfrOforxbrWIgv+Qq4GQHgMdWwzDdDxE1bAqK2mOoyXxmbJxGeueEVVa/Q==:"
@@ -174,6 +176,7 @@ def test_psk_with_dhchap(caplog, gateway):
     caplog.clear()
     cli(["host", "add", "--subsystem", subsystem, "--host-nqn", hostnqn10, "--psk", hostpsk1, "--dhchap-key", hostdhchap1])
     assert f"Adding host {hostnqn10} to {subsystem}: Successful" in caplog.text
+    assert f"Host {hostnqn10} has a DH-HMAC-CHAP key but subsystem {subsystem} has no key, a unidirectional authentication will be used" in caplog.text
 
 def test_list_listeners(caplog, gateway):
     caplog.clear()
@@ -190,3 +193,14 @@ def test_list_listeners(caplog, gateway):
         else:
             assert False
     assert found == 2
+
+def test_add_host_with_key_host_list(caplog, gateway):
+    caplog.clear()
+    rc = 0
+    try:
+        cli(["host", "add", "--subsystem", subsystem, "--host-nqn", hostnqn11, hostnqn12, "--psk", "junk"])
+    except SystemExit as sysex:
+        rc = int(str(sysex))
+        pass
+    assert "Can't have more than one host NQN when PSK keys are used" in caplog.text
+    assert rc == 2
