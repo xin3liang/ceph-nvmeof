@@ -1170,7 +1170,8 @@ class GatewayService(pb2_grpc.GatewayServicer):
             self.logger.error(errmsg)
             return pb2.nsid_status(status=errno.EINVAL, error_message=errmsg)
 
-        if self.subsystem_nsid_bdev_and_uuid.get_namespace_count(subsystem_nqn, True, 0) >= self.max_namespaces_with_netmask:
+        if no_auto_visible and self.subsystem_nsid_bdev_and_uuid.get_namespace_count(subsystem_nqn,
+                                                                               True, 0) >= self.max_namespaces_with_netmask:
             errmsg = f"Failure adding namespace{nsid_msg} to {subsystem_nqn}, maximal number of namespaces which are not auto visible ({self.max_namespaces_with_netmask}) was already reached"
             self.logger.error(f"{errmsg}")
             return pb2.req_status(status=errno.E2BIG, error_message=errmsg)

@@ -494,6 +494,9 @@ class TestCreate:
         caplog.clear()
         cli(["namespace", "add", "--subsystem", subsystem, "--rbd-pool", pool, "--rbd-image", image8, "--size", "16MB", "--rbd-create-image", "--no-auto-visible"])
         assert f"Failure adding namespace to {subsystem}, maximal number of namespaces which are not auto visible (3) was already reached" in caplog.text
+        caplog.clear()
+        cli(["namespace", "add", "--subsystem", subsystem, "--rbd-pool", pool, "--rbd-image", image8, "--size", "16MB", "--rbd-create-image"])
+        assert f"Adding namespace 11 to {subsystem}: Successful" in caplog.text
 
     def test_list_namespace_with_hosts(self, caplog, gateway):
         caplog.clear()
