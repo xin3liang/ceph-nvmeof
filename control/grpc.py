@@ -1172,7 +1172,18 @@ class GatewayService(pb2_grpc.GatewayServicer):
 
         if no_auto_visible and self.subsystem_nsid_bdev_and_uuid.get_namespace_count(subsystem_nqn,
                                                                                True, 0) >= self.max_namespaces_with_netmask:
-            errmsg = f"Failure adding namespace{nsid_msg} to {subsystem_nqn}, maximal number of namespaces which are not auto visible ({self.max_namespaces_with_netmask}) was already reached"
+            errmsg = f"Failure adding namespace{nsid_msg} to {subsystem_nqn}: maximal number of namespaces which are not auto visible ({self.max_namespaces_with_netmask}) has already been reached"
+            self.logger.error(f"{errmsg}")
+            return pb2.req_status(status=errno.E2BIG, error_message=errmsg)
+
+        if nsid and nsid > self.subsys_max_ns[subsystem_nqn]:
+            errmsg = f"Failure adding namespace to {subsystem_nqn}: requested NSID {nsid} is bigger than the maximal one ({self.subsys_max_ns[subsystem_nqn]})"
+            self.logger.error(f"{errmsg}")
+            return pb2.req_status(status=errno.E2BIG, error_message=errmsg)
+
+        if not nsid and self.subsystem_nsid_bdev_and_uuid.get_namespace_count(subsystem_nqn,
+                                                                        False, 0) >= self.subsys_max_ns[subsystem_nqn]:
+            errmsg = f"Failure adding namespace to {subsystem_nqn}: maximal number of namespaces ({self.subsys_max_ns[subsystem_nqn]}) has already been reached"
             self.logger.error(f"{errmsg}")
             return pb2.req_status(status=errno.E2BIG, error_message=errmsg)
 

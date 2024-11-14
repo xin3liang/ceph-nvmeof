@@ -19,11 +19,14 @@ image5 = "mytestdevimage5"
 image6 = "mytestdevimage6"
 image7 = "mytestdevimage7"
 image8 = "mytestdevimage8"
+image9 = "mytestdevimage9"
+image10 = "mytestdevimage10"
 pool = "rbd"
 subsystem = "nqn.2016-06.io.spdk:cnode1"
 subsystem2 = "nqn.2016-06.io.spdk:cnode2"
 subsystem3 = "nqn.2016-06.io.spdk:cnode3"
 subsystem4 = "nqn.2016-06.io.spdk:cnode4"
+subsystem5 = "nqn.2016-06.io.spdk:cnode5"
 discovery_nqn = "nqn.2014-08.org.nvmexpress.discovery"
 serial = "Ceph00000000000001"
 uuid = "948878ee-c3b2-4d58-a29b-2cff713fc02d"
@@ -470,6 +473,25 @@ class TestCreate:
         cli(["namespace", "add_host", "--subsystem", subsystem, "--nsid", "8", "--host-nqn", "*"])
         assert f"Failure adding host to namespace 8 on {subsystem}, host can't be \"*\"" in caplog.text
 
+    def test_add_too_many_namespaces_to_a_subsystem(self, caplog, gateway):
+        caplog.clear()
+        cli(["namespace", "add", "--subsystem", subsystem, "--rbd-pool", pool, "--rbd-image", image9, "--nsid", "3000", "--size", "16MB", "--rbd-create-image"])
+        assert f"Failure adding namespace to {subsystem}: requested NSID 3000 is bigger than the maximal one" in caplog.text
+        assert f"Received request to delete bdev" in caplog.text
+        caplog.clear()
+        cli(["subsystem", "add", "--subsystem", subsystem5, "--no-group-append", "--max-namespaces", "1"])
+        assert f"Adding subsystem {subsystem5}: Successful" in caplog.text
+        caplog.clear()
+        cli(["namespace", "add", "--subsystem", subsystem5, "--rbd-pool", pool, "--rbd-image", image9, "--size", "16MB", "--rbd-create-image"])
+        assert f"Adding namespace 1 to {subsystem5}: Successful" in caplog.text
+        caplog.clear()
+        cli(["namespace", "add", "--subsystem", subsystem5, "--rbd-pool", pool, "--rbd-image", image10, "--size", "16MB", "--rbd-create-image"])
+        assert f"Failure adding namespace to {subsystem5}: maximal number of namespaces (1) has already been reached" in caplog.text
+        assert f"Received request to delete bdev" in caplog.text
+        caplog.clear()
+        cli(["subsystem", "del", "--subsystem", subsystem5, "--force"])
+        assert f"Deleting subsystem {subsystem5}: Successful" in caplog.text
+
     def test_add_discovery_to_namespace(self, caplog, gateway):
         caplog.clear()
         cli(["namespace", "add_host", "--subsystem", subsystem, "--nsid", "8", "--host-nqn", discovery_nqn])
@@ -493,7 +515,7 @@ class TestCreate:
     def test_add_too_many_namespaces_with_hosts(self, caplog, gateway):
         caplog.clear()
         cli(["namespace", "add", "--subsystem", subsystem, "--rbd-pool", pool, "--rbd-image", image8, "--size", "16MB", "--rbd-create-image", "--no-auto-visible"])
-        assert f"Failure adding namespace to {subsystem}, maximal number of namespaces which are not auto visible (3) was already reached" in caplog.text
+        assert f"Failure adding namespace to {subsystem}: maximal number of namespaces which are not auto visible (3) has already been reached" in caplog.text
         caplog.clear()
         cli(["namespace", "add", "--subsystem", subsystem, "--rbd-pool", pool, "--rbd-image", image8, "--size", "16MB", "--rbd-create-image"])
         assert f"Adding namespace 11 to {subsystem}: Successful" in caplog.text
