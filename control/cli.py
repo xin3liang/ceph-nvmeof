@@ -357,6 +357,12 @@ class GatewayClient:
                 out_func(f"Gateway's load balancing group: {gw_info.load_balancing_group}")
                 out_func(f"Gateway's address: {gw_info.addr}")
                 out_func(f"Gateway's port: {gw_info.port}")
+                if gw_info.max_subsystems:
+                    out_func(f"Gateway's max subsystems: {gw_info.max_subsystems}")
+                if gw_info.max_namespaces:
+                    out_func(f"Gateway's max namespaces: {gw_info.max_namespaces}")
+                if gw_info.max_hosts_per_subsystem:
+                    out_func(f"Gateway's max hosts per subsystem: {gw_info.max_hosts_per_subsystem}")
                 if gw_info.spdk_version:
                     out_func(f"SPDK version: {gw_info.spdk_version}")
                 if not gw_info.bool_status:
@@ -663,9 +669,7 @@ class GatewayClient:
         """Create a subsystem"""
 
         out_func, err_func = self.get_output_functions(args)
-        if args.max_namespaces == None:
-            args.max_namespaces = 256
-        if args.max_namespaces <= 0:
+        if args.max_namespaces != None and args.max_namespaces <= 0:
             self.cli.parser.error("--max-namespaces value must be positive")
         if args.subsystem == GatewayUtils.DISCOVERY_NQN:
             self.cli.parser.error("Can't add a discovery subsystem")

@@ -411,6 +411,9 @@ message gateway_info {
 	optional string spdk_version = 10;
         uint32 load_balancing_group = 11;
 	string hostname = 12;
+	optional uint32 max_subsystems = 13;
+	optional uint32 max_namespaces = 14;
+	optional uint32 max_hosts_per_subsystem = 15;
 }
 
 message cli_version {
