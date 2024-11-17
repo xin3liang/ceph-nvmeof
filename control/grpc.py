@@ -70,12 +70,14 @@ class SubsystemHostAuth:
         self.subsys_dhchap_key = defaultdict(dict)
         self.host_dhchap_key = defaultdict(dict)
         self.host_psk_key = defaultdict(dict)
+        self.host_nqn = defaultdict(set)
 
     def clean_subsystem(self, subsys):
         self.host_psk_key.pop(subsys, None)
         self.host_dhchap_key.pop(subsys, None)
         self.subsys_allow_any_hosts.pop(subsys, None)
         self.subsys_dhchap_key.pop(subsys, None)
+        self.host_nqn.pop(subsys, None)
 
     def add_psk_host(self, subsys, host, key):
         if key:
@@ -122,6 +124,19 @@ class SubsystemHostAuth:
             return self.host_dhchap_key[subsys]
         return {}
 
+    def add_host_nqn(self, subsys, hostnqn):
+        self.host_nqn[subsys].add(hostnqn)
+
+    def remove_host_nqn(self, subsys, hostnqn):
+        if not subsys in self.host_nqn:
+            return
+        self.host_nqn[subsys].discard(hostnqn)
+
+    def get_host_count(self, subsys):
+        if not subsys in self.host_nqn:
+            return 0
+        return len(self.host_nqn[subsys])
+
     def allow_any_host(self, subsys):
         self.subsys_allow_any_hosts[subsys] = True
 
@@ -156,6 +171,9 @@ class NamespaceInfo:
         self.no_auto_visible = no_auto_visible
         self.anagrpid = anagrpid
         self.host_list = []
+
+    def __str__(self):
+        return f"nsid: {self.nsid}, bdev: {self.bdev}, uuid: {self.uuid}, no_auto_visible: {self.no_auto_visible}, anagrpid: {self.anagrpid}, hosts: {self.host_list}"
 
     def empty(self) -> bool:
         if self.bdev or self.uuid:
@@ -220,20 +238,26 @@ class NamespacesLocalList:
         return NamespacesLocalList.EMPTY_NAMESPACE
 
     def get_namespace_count(self, nqn, no_auto_visible = None, min_hosts = 0) -> int:
-        if nqn not in self.namespace_list:
+        if nqn and nqn not in self.namespace_list:
             return 0
 
+        if nqn:
+            subsystems = [nqn]
+        else:
+            subsystems = self.namespace_list.keys()
+        
         ns_count = 0
-        for nsid in self.namespace_list[nqn]:
-            ns = self.namespace_list[nqn][nsid]
-            if ns.empty():
-                continue
-            if no_auto_visible is not None:
-                if ns.no_auto_visible == no_auto_visible and ns.host_count() >= min_hosts:
-                    ns_count += 1
-            else:
-                if ns.host_count() >= min_hosts:
-                    ns_count += 1
+        for one_subsys in subsystems:
+            for nsid in self.namespace_list[one_subsys]:
+                ns = self.namespace_list[one_subsys][nsid]
+                if ns.empty():
+                    continue
+                if no_auto_visible is not None:
+                    if ns.no_auto_visible == no_auto_visible and ns.host_count() >= min_hosts:
+                        ns_count += 1
+                else:
+                    if ns.host_count() >= min_hosts:
+                        ns_count += 1
 
         return ns_count
 
@@ -266,6 +290,9 @@ class GatewayService(pb2_grpc.GatewayServicer):
     DHCHAP_PREFIX = "dhchap"
     DHCHAP_CONTROLLER_PREFIX = "dhchap_ctrlr"
     KEYS_DIR = "/var/tmp"
+    MAX_SUBSYSTEMS_DEFAULT = 128
+    MAX_NAMESPACES_DEFAULT = 256
+    MAX_HOSTS_PER_SUBSYS_DEFAULT = 32
 
     def __init__(self, config: GatewayConfig, gateway_state: GatewayStateHandler, rpc_lock, omap_lock: OmapLock, group_id: int, spdk_rpc_client, spdk_rpc_subsystems_client, ceph_utils: CephUtils) -> None:
         """Constructor"""
@@ -336,6 +363,9 @@ class GatewayService(pb2_grpc.GatewayServicer):
         self.gateway_group = self.config.get_with_default("gateway", "group", "")
         self.max_hosts_per_namespace = self.config.getint_with_default("gateway", "max_hosts_per_namespace", 1)
         self.max_namespaces_with_netmask = self.config.getint_with_default("gateway", "max_namespaces_with_netmask", 1000)
+        self.max_subsystems = self.config.getint_with_default("gateway", "max_subsystems", GatewayService.MAX_SUBSYSTEMS_DEFAULT)
+        self.max_namespaces = self.config.getint_with_default("gateway", "max_namespaces", GatewayService.MAX_NAMESPACES_DEFAULT)
+        self.max_hosts_per_subsystem = self.config.getint_with_default("gateway", "max_hosts_per_subsystem", GatewayService.MAX_HOSTS_PER_SUBSYS_DEFAULT)
         self.gateway_pool = self.config.get_with_default("ceph", "pool", "")
         self.ana_map = defaultdict(dict)
         self.cluster_nonce = {}
@@ -885,6 +915,12 @@ class GatewayService(pb2_grpc.GatewayServicer):
             self.logger.error(f"{errmsg}")
             return pb2.subsys_status(status = errno.EINVAL, error_message = errmsg, nqn = request.subsystem_nqn)
 
+        if not request.max_namespaces:
+            request.max_namespaces = self.max_namespaces
+        else:
+            if request.max_namespaces > self.max_namespaces:
+                self.logger.warning(f"The requested max number of namespaces for subsystem {request.subsystem_nqn} ({request.max_namespaces}) is greater than the global limit on the number of namespaces ({self.max_namespaces}), will continue")
+
         errmsg = ""
         if not GatewayState.is_key_element_valid(request.subsystem_nqn):
             errmsg = f"{create_subsystem_error_prefix}: Invalid NQN \"{request.subsystem_nqn}\", contains invalid characters"
@@ -902,6 +938,11 @@ class GatewayService(pb2_grpc.GatewayServicer):
             errmsg = f"{create_subsystem_error_prefix}: Can't create a discovery subsystem"
             self.logger.error(f"{errmsg}")
             return pb2.subsys_status(status = errno.EINVAL, error_message = errmsg, nqn = request.subsystem_nqn)
+
+        if len(self.subsys_max_ns) >= self.max_subsystems:
+            errmsg = f"{create_subsystem_error_prefix}: Maximal number of subsystems ({self.max_subsystems}) has already been reached"
+            self.logger.error(f"{errmsg}")
+            return pb2.subsys_status(status = errno.E2BIG, error_message = errmsg, nqn = request.subsystem_nqn)
 
         if context:
             if request.no_group_append or not self.gateway_group:
@@ -949,7 +990,7 @@ class GatewayService(pb2_grpc.GatewayServicer):
                     max_cntlid=max_cntlid,
                     ana_reporting = True,
                 )
-                self.subsys_max_ns[request.subsystem_nqn] = request.max_namespaces if request.max_namespaces else 32
+                self.subsys_max_ns[request.subsystem_nqn] = request.max_namespaces
                 if request.dhchap_key:
                     self.host_info.add_dhchap_key_to_subsystem(request.subsystem_nqn, request.dhchap_key)
                 self.logger.debug(f"create_subsystem {request.subsystem_nqn}: {ret}")
@@ -1172,18 +1213,23 @@ class GatewayService(pb2_grpc.GatewayServicer):
 
         if no_auto_visible and self.subsystem_nsid_bdev_and_uuid.get_namespace_count(subsystem_nqn,
                                                                                True, 0) >= self.max_namespaces_with_netmask:
-            errmsg = f"Failure adding namespace{nsid_msg} to {subsystem_nqn}: maximal number of namespaces which are not auto visible ({self.max_namespaces_with_netmask}) has already been reached"
+            errmsg = f"Failure adding namespace{nsid_msg} to {subsystem_nqn}: Maximal number of namespaces which are not auto visible ({self.max_namespaces_with_netmask}) has already been reached"
             self.logger.error(f"{errmsg}")
             return pb2.req_status(status=errno.E2BIG, error_message=errmsg)
 
         if nsid and nsid > self.subsys_max_ns[subsystem_nqn]:
-            errmsg = f"Failure adding namespace to {subsystem_nqn}: requested NSID {nsid} is bigger than the maximal one ({self.subsys_max_ns[subsystem_nqn]})"
+            errmsg = f"Failure adding namespace to {subsystem_nqn}: Requested NSID {nsid} is bigger than the maximal one ({self.subsys_max_ns[subsystem_nqn]})"
             self.logger.error(f"{errmsg}")
             return pb2.req_status(status=errno.E2BIG, error_message=errmsg)
 
         if not nsid and self.subsystem_nsid_bdev_and_uuid.get_namespace_count(subsystem_nqn,
-                                                                        False, 0) >= self.subsys_max_ns[subsystem_nqn]:
-            errmsg = f"Failure adding namespace to {subsystem_nqn}: maximal number of namespaces ({self.subsys_max_ns[subsystem_nqn]}) has already been reached"
+                                                                        None, 0) >= self.subsys_max_ns[subsystem_nqn]:
+            errmsg = f"Failure adding namespace to {subsystem_nqn}: Subsystem's maximal number of namespaces ({self.subsys_max_ns[subsystem_nqn]}) has already been reached"
+            self.logger.error(f"{errmsg}")
+            return pb2.req_status(status=errno.E2BIG, error_message=errmsg)
+
+        if self.subsystem_nsid_bdev_and_uuid.get_namespace_count(None, None, 0) >= self.max_namespaces:
+            errmsg = f"Failure adding namespace to {subsystem_nqn}: Maximal number of namespaces ({self.max_namespaces}) has already been reached"
             self.logger.error(f"{errmsg}")
             return pb2.req_status(status=errno.E2BIG, error_message=errmsg)
 
@@ -2411,6 +2457,11 @@ class GatewayService(pb2_grpc.GatewayServicer):
                 self.logger.error(f"{errmsg}")
                 return pb2.req_status(status=errno.EEXIST, error_message=errmsg)
 
+        if request.host_nqn != "*" and self.host_info.get_host_count(request.subsystem_nqn) >= self.max_hosts_per_subsystem:
+            errmsg = f"{host_failure_prefix}: Maximal number of hosts for subsystem ({self.max_hosts_per_subsystem}) has already been reached"
+            self.logger.error(f"{errmsg}")
+            return pb2.subsys_status(status = errno.E2BIG, error_message = errmsg, nqn = request.subsystem_nqn)
+
         dhchap_ctrlr_key = self.host_info.get_subsystem_dhchap_key(request.subsystem_nqn)
         if dhchap_ctrlr_key:
             self.logger.info(f"Got DHCHAP key {dhchap_ctrlr_key} for subsystem {request.subsystem_nqn}")
@@ -2486,6 +2537,7 @@ class GatewayService(pb2_grpc.GatewayServicer):
                             pass
                     if dhchap_file:
                         self.host_info.add_dhchap_host(request.subsystem_nqn, request.host_nqn, request.dhchap_key)
+                    self.host_info.add_host_nqn(request.subsystem_nqn, request.host_nqn)
             except Exception as ex:
                 if request.host_nqn == "*":
                     self.logger.exception(all_host_failure_prefix)
@@ -2609,6 +2661,7 @@ class GatewayService(pb2_grpc.GatewayServicer):
                     self.host_info.remove_dhchap_host(request.subsystem_nqn, request.host_nqn)
                     self.remove_all_host_key_files(request.subsystem_nqn, request.host_nqn)
                     self.remove_all_host_keys_from_keyring(request.subsystem_nqn, request.host_nqn)
+                    self.host_info.remove_host_nqn(request.subsystem_nqn, request.host_nqn)
             except Exception as ex:
                 if request.host_nqn == "*":
                     self.logger.exception(all_host_failure_prefix)
@@ -3679,6 +3732,9 @@ class GatewayService(pb2_grpc.GatewayServicer):
                                load_balancing_group = self.group_id + 1,
                                bool_status = True,
                                hostname = self.host_name,
+                               max_subsystems = self.max_subsystems,
+                               max_namespaces = self.max_namespaces,
+                               max_hosts_per_subsystem = self.max_hosts_per_subsystem,
                                status = 0,
                                error_message = os.strerror(0))
         cli_ver = self.parse_version(cli_version_string)
