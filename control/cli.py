@@ -361,6 +361,8 @@ class GatewayClient:
                     out_func(f"Gateway's max subsystems: {gw_info.max_subsystems}")
                 if gw_info.max_namespaces:
                     out_func(f"Gateway's max namespaces: {gw_info.max_namespaces}")
+                if gw_info.max_namespaces_per_subsystem:
+                    out_func(f"Gateway's max namespaces per subsystem: {gw_info.max_namespaces_per_subsystem}")
                 if gw_info.max_hosts_per_subsystem:
                     out_func(f"Gateway's max hosts per subsystem: {gw_info.max_hosts_per_subsystem}")
                 if gw_info.spdk_version:
