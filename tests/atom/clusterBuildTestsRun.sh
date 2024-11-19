@@ -77,6 +77,7 @@ if [ "$5" != "nightly" ]; then
         -v /root/.ssh:/root/.ssh \
         nvmeof_atom:"$ATOM_SHA" \
         python3 cephnvme_atom.py \
+        nvmeof \
         quay.ceph.io/ceph-ci/ceph:"$CEPH_SHA" \
         quay.io/ceph/nvmeof:"$VERSION" \
         quay.io/ceph/nvmeof-cli:"$VERSION" \
@@ -84,7 +85,9 @@ if [ "$5" != "nightly" ]; then
         --stopNvmeofDaemon \
         --stopNvmeofSystemctl \
         --stopMonLeader \
+        --killMonClient \
         --rmNvmeofDaemon \
+        --redeployGWs \
         --gitHubActionDeployment \
         --dontUseMTLS \
         --skiplbTest \
@@ -96,6 +99,7 @@ else
         -v /root/.ssh:/root/.ssh \
         nvmeof_atom:"$ATOM_SHA" \
         python3 cephnvme_atom.py \
+        nvmeof \
         quay.ceph.io/ceph-ci/ceph:"$CEPH_SHA" \
         quay.io/ceph/nvmeof:"$VERSION" \
         quay.io/ceph/nvmeof-cli:"$VERSION" \
@@ -103,8 +107,11 @@ else
         --stopNvmeofDaemon \
         --stopNvmeofSystemctl \
         --stopMonLeader \
+        --killMonClient \
         --rmNvmeofDaemon \
+        --redeployGWs \
         --gitHubActionDeployment \
+        --dontUseHUGEPAGES \
         --dontUseMTLS \
         --skiplbTest \
         --journalctlToConsole \
