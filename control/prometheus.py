@@ -421,6 +421,7 @@ class NVMeOFCollector:
         yield subsystem_metadata
         yield subsystem_listeners
         yield subsystem_host_count
+        yield subsystem_namespace_count 
         yield subsystem_namespace_limit
         yield subsystem_namespace_metadata
         yield host_connection_state
