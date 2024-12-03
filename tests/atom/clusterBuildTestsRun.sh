@@ -48,23 +48,6 @@ git checkout $ATOM_SHA
 # Build atom images based on the cloned repo
 docker build -t nvmeof_atom:$ATOM_SHA .
 
-# Atom test script run
-#   Description of the uncleared flags with their default values
-#   - Upgrade ceph image target (None)
-#   - Upgrade nvmeof image target (None)
-#   - Nvmeof cli image use in target (None)
-#   - Number of gateways (4)
-#   - Number of gateways to stop (1)
-#   - Number of gateways after scale down (1)
-#   - Number of subsystems (2)
-#   - Number of namespaces (4)
-#   - Max namespaces per subsystem (1024)
-#   - HA failover cycles (2)
-#   - HA failover cycles after upgrade (2)
-#   - RBD size (200M)
-#   - Seed number (0)
-#   - FIO use (1=run fio, 0=don't run fio)
-
 set -x
 if [ "$5" != "nightly" ]; then
     sudo docker run \
@@ -97,8 +80,7 @@ if [ "$5" != "nightly" ]; then
         --nvmeof-daemon-remove \
         --redeploy-gws \
         --github-action-deployment \
-        --dont-use-mtls \
-        --skip-lb-test \
+        --skip-ns-rebalancing-test \
         --journalctl-to-console \
         --dont-power-off-cloud-vms \
         --env=m6
@@ -116,8 +98,8 @@ else
         --gw-num=4 \
         --gw-to-stop-num=1 \
         --gw-scale-down-num=1 \
-        --subsystem-num=10 \
-        --ns-num=90 \
+        --subsystem-num=118 \
+        --ns-num=8 \
         --subsystem-max-ns-num=1024 \
         --failover-num=6 \
         --failover-num-after-upgrade=2 \
@@ -134,7 +116,7 @@ else
         --redeploy-gws \
         --github-action-deployment \
         --dont-use-mtls \
-        --skip-lb-test \
+        --skip-ns-rebalancing-test \
         --journalctl-to-console \
         --dont-power-off-cloud-vms \
         --dont-use-hugepages \
