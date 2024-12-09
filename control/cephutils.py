@@ -6,8 +6,6 @@
 #
 #  Authors: gbregman@ibm.com
 #
-
-import uuid
 import errno
 import rbd
 import rados
@@ -24,6 +22,8 @@ class CephUtils:
         self.ceph_conf = config.get_with_default("ceph", "config_file", "/etc/ceph/ceph.conf")
         self.rados_id = config.get_with_default("ceph", "id", "")
         self.anagroup_list = []
+        self.rebalance_supported = False
+        self.rebalance_ana_group = 0
         self.last_sent = time.time()
 
     def execute_ceph_monitor_command(self, cmd):
@@ -50,6 +50,12 @@ class CephUtils:
               break
         return gw_id
 
+    def is_rebalance_supported(self):
+        return  self.rebalance_supported
+
+    def get_rebalance_ana_group(self):
+        return  self.rebalance_ana_group
+
     def get_number_created_gateways(self, pool, group):
         now = time.time()
         if (now - self.last_sent) < 10 and self.anagroup_list :
@@ -64,6 +70,14 @@ class CephUtils:
                 rply = self.execute_ceph_monitor_command(str)
                 self.logger.debug(f"reply \"{rply}\"")
                 conv_str = rply[1].decode()
+                pos = conv_str.find('"LB"')
+                if pos != -1:
+                    data = json.loads(conv_str)
+                    self.rebalance_supported = True
+                    self.rebalance_ana_group = data.get("rebalance_ana_group", None)
+                    self.logger.debug(f"Rebalance ana_group: {self.rebalance_ana_group}")
+                else :
+                    self.rebalance_supported = False
                 pos = conv_str.find("[")
                 if pos != -1:
                     new_str = conv_str[pos + len("[") :]
