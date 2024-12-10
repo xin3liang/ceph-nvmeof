@@ -133,7 +133,7 @@ validate_all_active() {
 NUM_SUBSYSTEMS=2
 NUM_GATEWAYS=4
 FAILING_GATEWAYS=2
-NUM_OPTIMIZED=2
+NUM_OPTIMIZED=1
 #
 # Step 1 validate all gateways are optimized for one of ANA group
 # and all groups are unique
@@ -156,10 +156,11 @@ for i in $(seq 0 $(expr $FAILING_GATEWAYS - 1)); do
   echo  📫 nvme-gw delete gateway: \'$gw_name\' pool: \'$POOL\', group: \'\' \(empty string\)
   docker compose exec -T ceph ceph nvme-gw delete $gw_name $POOL ''
 done
-
+sleep 100 # wait for scale down rebalance complete
 docker ps
 
-# expect remaining gws to have two optimized groups each
+# expect remaining gws to have 1 optimized groups each because
+# due to scale down rebalance 2 deleted gws and 2 ANA groups were removed from the monitor's database
 for i in $(seq 4); do
   found=0
   for j in $(seq 0 $(expr $FAILING_GATEWAYS - 1)); do
