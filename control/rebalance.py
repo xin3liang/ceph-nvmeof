@@ -37,7 +37,7 @@ class Rebalance:
                 try:
                     rc = self.gw_srv.execute_grpc_function(self.rebalance_logic, None, "context")
                     if rc == 1:
-                        self.logger.info(f"Nothing found for rebalance, break at {i} iteration")
+                        self.logger.debug(f"Nothing found for rebalance, break at {i} iteration")
                         break
                 except Exception:
                         self.logger.exception(f"Exception in auto rebalance")
@@ -85,7 +85,7 @@ class Rebalance:
     # and reballance results will be accurate. Monitor in nvme-gw show response publishes the index of ANA group that is currently responsible for rebalance
     def rebalance_logic(self, request, context)->int:
         worker_ana_group = self.ceph_utils.get_rebalance_ana_group()
-        self.logger.info(f"Called rebalance logic: current rebalancing ana group {worker_ana_group}")
+        self.logger.debug(f"Called rebalance logic: current rebalancing ana group {worker_ana_group}")
         ongoing_scale_down_rebalance = False
         grps_list = self.ceph_utils.get_number_created_gateways(self.gw_srv.gateway_pool, self.gw_srv.gateway_group)
         if not self.ceph_utils.is_rebalance_supported():
@@ -101,7 +101,7 @@ class Rebalance:
         for ana_grp in self.gw_srv.ana_grp_state:
             if self.gw_srv.ana_grp_state[ana_grp] == pb2.ana_state.OPTIMIZED :
                 if ana_grp not in grps_list:
-                    self.logger.info(f"Found optimized ana group {ana_grp} that handles to group of deleted GW."
+                    self.logger.info(f"Found optimized ana group {ana_grp} that handles the group of deleted GW."
                                      f"Number NS in group {self.gw_srv.ana_grp_ns_load[ana_grp]} - Start NS rebalance")
                     if self.gw_srv.ana_grp_ns_load[ana_grp] >= self.rebalance_max_ns_to_change_lb_grp:
                        num = self.rebalance_max_ns_to_change_lb_grp
@@ -109,7 +109,7 @@ class Rebalance:
                        num = self.gw_srv.ana_grp_ns_load[ana_grp]
                     if num > 0 :
                         min_ana_grp, chosen_nqn = self.find_min_loaded_group(grps_list)
-                        self.logger.info(f"Found destination ana group {min_ana_grp}, subsystem {chosen_nqn}")
+                        self.logger.info(f"Start rebalance (scale down)  destination ana group {min_ana_grp}, subsystem {chosen_nqn}")
                         self.ns_rebalance(context, ana_grp, min_ana_grp, 1, "0")#scale down rebalance
                         return 0
                     else :
@@ -130,7 +130,7 @@ class Rebalance:
                                     (self.gw_srv.ana_grp_subs_load[min_ana_grp][nqn] + 1) <= target_subs_per_ana
                                     or (self.gw_srv.ana_grp_subs_load[min_ana_grp][nqn] + 1) == (self.gw_srv.ana_grp_subs_load[ana_grp][nqn] - 1)
                                    ):
-                                       self.logger.debug(f"Start rebalance in subsystem {nqn}, dest ana {min_ana_grp}, dest ana load per subs {min_load}")
+                                       self.logger.info(f"Start rebalance (regular) in subsystem {nqn}, dest ana {min_ana_grp}, dest ana load per subs {min_load}")
                                        self.ns_rebalance(context, ana_grp, min_ana_grp, 1, nqn) #regular rebalance
                                        return 0
                                 else:
