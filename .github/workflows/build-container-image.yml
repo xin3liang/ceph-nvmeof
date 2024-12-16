@@ -60,7 +60,7 @@ jobs:
         uses: docker/setup-qemu-action@v3
 
       - name: Build container images - spdk
-        run: make build SVC=spdk TARGET_ARCH=arm64
+        run: make build SVC=spdk TARGET_ARCH=arm64 SPDK_TARGET_ARCH="armv8.2-a+crypto" SPDK_MAKEFLAGS="DPDKBUILD_FLAGS=-Dplatform=kunpeng920 -j$(nproc)"
 
       - name: Build container images - bdevperf
         run: make build SVC=bdevperf TARGET_ARCH=arm64
